@@ -6,8 +6,8 @@ const blockchainService = require('./blockchain-service');
 const mediaService = require('./media-service');
 
 async function registerLot(prisma, payload, actorId, blockchain, requestId) {
-  if (payload.gpsPrecisionM > 50) {
-    throw new AppError('gps_precision', 'GPS precision above 50m', 400);
+  if (payload.gpsPrecisionM > 100) {
+    throw new AppError('gps_precision', 'GPS precision above 100m', 400);
   }
 
   let lotCode = null;
