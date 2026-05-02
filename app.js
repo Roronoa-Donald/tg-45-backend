@@ -16,6 +16,7 @@ function buildApp() {
             }
           : undefined
     },
+    bodyLimit: 50 * 1024 * 1024, // 50MB
     genReqId: () => crypto.randomUUID()
   });
 
