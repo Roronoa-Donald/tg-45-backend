@@ -1,0 +1,7 @@
+const multipart = require('@fastify/multipart');
+
+module.exports = async function multipartPlugin(app) {
+  await app.register(multipart, {
+    limits: { fileSize: 10 * 1024 * 1024 }
+  });
+};
