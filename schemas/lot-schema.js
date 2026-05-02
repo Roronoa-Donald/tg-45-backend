@@ -8,7 +8,9 @@ const lotRegisterSchema = z.object({
   gpsOriginLat: z.number(),
   gpsOriginLng: z.number(),
   gpsPrecisionM: z.number().int().positive(),
-  cooperativeId: z.string().uuid().optional()
+  cooperativeId: z.string().uuid().optional(),
+  title: z.string().optional(),
+  draftId: z.string().optional()
 });
 
 const lotQuerySchema = z.object({

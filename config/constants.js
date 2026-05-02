@@ -11,7 +11,8 @@ const LOT_STATUS = {
   REGISTERED: 'registered',
   VALIDATED: 'validated',
   CERTIFIED: 'certified',
-  SHIPPED: 'shipped'
+  SHIPPED: 'shipped',
+  REJECTED: 'rejected'
 };
 
 const VERIFICATION_STATUS = {

@@ -29,7 +29,11 @@ async function listLots(prisma, where, skip, take) {
     where,
     skip,
     take,
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: 'desc' },
+    include: {
+      owner: { select: { name: true } },
+      cooperative: { select: { name: true } }
+    }
   });
 }
 

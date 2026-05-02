@@ -3,10 +3,11 @@ const { LOT_EVENT_TYPES, LOT_STATUS } = require('../config/constants');
 const lotRepository = require('../repositories/lot-repository');
 
 const STATUS_TRANSITIONS = {
-  [LOT_STATUS.REGISTERED]: [LOT_STATUS.VALIDATED],
-  [LOT_STATUS.VALIDATED]: [LOT_STATUS.CERTIFIED],
+  [LOT_STATUS.REGISTERED]: [LOT_STATUS.VALIDATED, LOT_STATUS.REJECTED],
+  [LOT_STATUS.VALIDATED]: [LOT_STATUS.CERTIFIED, LOT_STATUS.REJECTED],
   [LOT_STATUS.CERTIFIED]: [LOT_STATUS.SHIPPED],
-  [LOT_STATUS.SHIPPED]: []
+  [LOT_STATUS.SHIPPED]: [],
+  [LOT_STATUS.REJECTED]: []
 };
 
 async function assignStatus(prisma, lotId, status, actorId, reason) {
@@ -17,6 +18,9 @@ async function assignStatus(prisma, lotId, status, actorId, reason) {
 
   const allowed = STATUS_TRANSITIONS[lot.status] || [];
   if (!allowed.includes(status)) {
+    if (lot.status === status) {
+      return lot;
+    }
     throw new AppError('invalid_transition', 'Invalid status transition', 400, {
       current: lot.status,
       allowed

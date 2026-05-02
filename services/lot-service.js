@@ -14,7 +14,7 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
   let lot = null;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    lotCode = newLotCode();
+    lotCode = attempt === 0 && payload.title ? payload.title : newLotCode();
     try {
       lot = await prisma.$transaction(async (tx) => {
         const created = await lotRepository.createLot(tx, {
@@ -69,8 +69,13 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
   return lotRepository.findLotById(prisma, lot.id);
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 async function getLot(prisma, id) {
-  const lot = await lotRepository.findLotById(prisma, id) || await lotRepository.findLotByCode(prisma, id);
+  const lot = (isUuid(id) ? await lotRepository.findLotById(prisma, id) : null)
+    || await lotRepository.findLotByCode(prisma, id);
   if (!lot) {
     throw new AppError('not_found', 'Lot not found', 404);
   }
