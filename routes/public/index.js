@@ -17,7 +17,8 @@ function buildPublicLot(lot) {
     events: lot.events.map((event) => ({
       eventType: event.eventType,
       occurredAt: event.occurredAt,
-      metadata: event.metadata
+      metadata: event.metadata,
+      actorName: event.actor?.name || 'Inconnu'
     })),
     images: lot.images.map((image) => ({
       url: image.url,

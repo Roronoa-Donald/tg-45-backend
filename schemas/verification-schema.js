@@ -2,7 +2,8 @@ const { z } = require('zod');
 
 const statusUpdateSchema = z.object({
   status: z.string().min(3),
-  reason: z.string().optional()
+  reason: z.string().optional(),
+  gps: z.object({ lat: z.number(), lng: z.number() }).optional()
 });
 
 const proofSchema = z.object({
@@ -11,7 +12,8 @@ const proofSchema = z.object({
 });
 
 const certificationSchema = z.object({
-  signature: z.string().min(8).optional()
+  signature: z.string().min(8).optional(),
+  gps: z.object({ lat: z.number(), lng: z.number() }).optional()
 });
 
 const batchVerifySchema = z.object({

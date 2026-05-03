@@ -33,4 +33,6 @@ module.exports = async function cooperativeRoutes(app) {
   });
 
   await app.register(require('./members'));
+  await app.register(require('./farmers'));
+  await app.register(require('./exports'));
 };

@@ -6,7 +6,10 @@ async function findLotById(prisma, id) {
   return prisma.lot.findUnique({
     where: { id },
     include: {
-      events: { orderBy: { occurredAt: 'asc' } },
+      events: {
+        orderBy: { occurredAt: 'asc' },
+        include: { actor: { select: { name: true } } }
+      },
       images: true,
       certification: true
     }
@@ -17,7 +20,10 @@ async function findLotByCode(prisma, lotCode) {
   return prisma.lot.findFirst({
     where: { lotCode },
     include: {
-      events: { orderBy: { occurredAt: 'asc' } },
+      events: {
+        orderBy: { occurredAt: 'asc' },
+        include: { actor: { select: { name: true } } }
+      },
       images: true,
       certification: true
     }

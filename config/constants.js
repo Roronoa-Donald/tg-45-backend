@@ -4,13 +4,15 @@ const USER_ROLES = {
   EXPORTER: 'exporter',
   VERIFIER: 'verifier',
   SUPPORT: 'support',
-  ADMIN: 'admin'
+  ADMIN: 'admin',
+  MINISTRY: 'ministry'
 };
 
 const LOT_STATUS = {
   REGISTERED: 'registered',
   VALIDATED: 'validated',
   CERTIFIED: 'certified',
+  EXPORTED: 'exported',
   SHIPPED: 'shipped',
   REJECTED: 'rejected'
 };

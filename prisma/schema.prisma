@@ -8,55 +8,55 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  role         String    @db.VarChar(32)
-  name         String?
-  phone        String?   @unique
-  email        String?   @unique
-  passwordHash String?   @map("password_hash")
-  pinHash      String?   @map("pin_hash")
-  status       String    @default("active")
-  cooperativeId String?  @map("cooperative_id") @db.Uuid
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-
-  cooperative  Cooperative? @relation("CooperativeUsers", fields: [cooperativeId], references: [id])
+  id                     String              @id @default(uuid()) @db.Uuid
+  role                   String              @db.VarChar(32)
+  name                   String?
+  phone                  String?             @unique
+  email                  String?             @unique
+  passwordHash           String?             @map("password_hash")
+  pinHash                String?             @map("pin_hash")
+  status                 String              @default("pending")
+  cooperativeId          String?             @map("cooperative_id") @db.Uuid
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+  auditLogs              AuditLog[]          @relation("audit_actor")
   cooperativeMemberships CooperativeMember[]
-  farmerProfile FarmerProfile?
-  auditLogs    AuditLog[] @relation("audit_actor")
-  lotEvents    LotEvent[] @relation("lot_actor")
-  lots         Lot[] @relation("lot_owner")
-  certifications LotCertification[] @relation("certifier")
-  exports      Export[] @relation("exporter")
+  exports                Export[]            @relation("exporter")
+  farmerProfile          FarmerProfile?
+  certifications         LotCertification[]  @relation("certifier")
+  lotEvents              LotEvent[]          @relation("lot_actor")
+  lots                   Lot[]               @relation("lot_owner")
+  cooperative            Cooperative?        @relation("CooperativeUsers", fields: [cooperativeId], references: [id])
 
   @@map("users")
 }
 
 model Cooperative {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  region    String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  users     User[] @relation("CooperativeUsers")
-  members   CooperativeMember[]
-  lots      Lot[]
-  apiKeys   ApiKey[]
-  exports   Export[]
+  id          String              @id @default(uuid()) @db.Uuid
+  name        String
+  region      String?
+  status      String              @default("pending")
+  memberCount Int                 @default(0) @map("member_count")
+  chiefName   String?             @map("chief_name")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  apiKeys     ApiKey[]
+  members     CooperativeMember[]
+  exports     Export[]
+  lots        Lot[]
+  users       User[]              @relation("CooperativeUsers")
 
   @@map("cooperatives")
 }
 
 model CooperativeMember {
-  id            String  @id @default(uuid()) @db.Uuid
-  cooperativeId String  @map("cooperative_id") @db.Uuid
-  userId        String  @map("user_id") @db.Uuid
+  id            String      @id @default(uuid()) @db.Uuid
+  cooperativeId String      @map("cooperative_id") @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
   role          String?
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  cooperative Cooperative @relation(fields: [cooperativeId], references: [id])
-  user        User        @relation(fields: [userId], references: [id])
+  createdAt     DateTime    @default(now()) @map("created_at")
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+  user          User        @relation(fields: [userId], references: [id])
 
   @@unique([cooperativeId, userId])
   @@map("cooperative_members")
@@ -64,60 +64,56 @@ model CooperativeMember {
 
 model FarmerProfile {
   id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
   farmName  String?  @map("farm_name")
   location  String?
   language  String?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id])
 
-  user User @relation(fields: [userId], references: [id])
-
-  @@unique([userId])
   @@map("farmer_profiles")
 }
 
 model Lot {
-  id               String   @id @default(uuid()) @db.Uuid
-  lotCode          String   @unique @map("lot_code")
-  ownerId          String   @map("owner_id") @db.Uuid
-  cooperativeId    String?  @map("cooperative_id") @db.Uuid
-  product          String
-  variety          String?
-  weightKg         Decimal  @map("weight_kg") @db.Decimal(10, 2)
-  harvestDate      DateTime? @map("harvest_date")
-  gpsOriginLat     Decimal  @map("gps_origin_lat") @db.Decimal(10, 6)
-  gpsOriginLng     Decimal  @map("gps_origin_lng") @db.Decimal(10, 6)
-  gpsPrecisionM    Int      @map("gps_precision_m")
-  gpsAreaRadiusM   Int      @default(100) @map("gps_area_radius_m")
-  status           String   @default("registered")
-  blockchainTxHash String?  @map("blockchain_tx_hash")
-  blockchainProofHash String? @map("blockchain_proof_hash")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  owner        User         @relation("lot_owner", fields: [ownerId], references: [id])
-  cooperative  Cooperative? @relation(fields: [cooperativeId], references: [id])
-  events       LotEvent[]
-  images       LotImage[]
-  certification LotCertification?
-  exports      ExportLot[]
+  id                  String            @id @default(uuid()) @db.Uuid
+  lotCode             String            @unique @map("lot_code")
+  ownerId             String            @map("owner_id") @db.Uuid
+  cooperativeId       String?           @map("cooperative_id") @db.Uuid
+  product             String
+  variety             String?
+  weightKg            Decimal           @map("weight_kg") @db.Decimal(10, 2)
+  harvestDate         DateTime?         @map("harvest_date")
+  gpsOriginLat        Decimal           @map("gps_origin_lat") @db.Decimal(10, 6)
+  gpsOriginLng        Decimal           @map("gps_origin_lng") @db.Decimal(10, 6)
+  gpsPrecisionM       Int               @map("gps_precision_m")
+  gpsAreaRadiusM      Int               @default(100) @map("gps_area_radius_m")
+  status              String            @default("registered")
+  blockchainTxHash    String?           @map("blockchain_tx_hash")
+  blockchainProofHash String?           @map("blockchain_proof_hash")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  exports             ExportLot[]
+  certification       LotCertification?
+  events              LotEvent[]
+  images              LotImage[]
+  cooperative         Cooperative?      @relation(fields: [cooperativeId], references: [id])
+  owner               User              @relation("lot_owner", fields: [ownerId], references: [id])
 
   @@map("lots")
 }
 
 model LotEvent {
-  id               String   @id @default(uuid()) @db.Uuid
-  lotId            String   @map("lot_id") @db.Uuid
-  actorId          String?  @map("actor_id") @db.Uuid
-  eventType        String   @map("event_type")
-  occurredAt       DateTime @default(now()) @map("occurred_at")
-  metadata         Json?
-  blockchainTxHash String?  @map("blockchain_tx_hash")
-  blockchainProofHash String? @map("blockchain_proof_hash")
-
-  lot   Lot  @relation(fields: [lotId], references: [id])
-  actor User? @relation("lot_actor", fields: [actorId], references: [id])
+  id                  String   @id @default(uuid()) @db.Uuid
+  lotId               String   @map("lot_id") @db.Uuid
+  actorId             String?  @map("actor_id") @db.Uuid
+  eventType           String   @map("event_type")
+  occurredAt          DateTime @default(now()) @map("occurred_at")
+  metadata            Json?
+  blockchainTxHash    String?  @map("blockchain_tx_hash")
+  blockchainProofHash String?  @map("blockchain_proof_hash")
+  actor               User?    @relation("lot_actor", fields: [actorId], references: [id])
+  lot                 Lot      @relation(fields: [lotId], references: [id])
 
   @@map("lot_events")
 }
@@ -130,37 +126,34 @@ model LotImage {
   checksum  String?
   isPrimary Boolean  @default(false) @map("is_primary")
   createdAt DateTime @default(now()) @map("created_at")
-
-  lot Lot @relation(fields: [lotId], references: [id])
+  lot       Lot      @relation(fields: [lotId], references: [id])
 
   @@map("lot_images")
 }
 
 model LotCertification {
-  id        String   @id @default(uuid()) @db.Uuid
-  lotId     String   @unique @map("lot_id") @db.Uuid
-  verifierId String  @map("verifier_id") @db.Uuid
-  status    String   @default("approved")
-  signature String?
-  issuedAt  DateTime @default(now()) @map("issued_at")
-
-  lot      Lot  @relation(fields: [lotId], references: [id])
-  verifier User @relation("certifier", fields: [verifierId], references: [id])
+  id         String   @id @default(uuid()) @db.Uuid
+  lotId      String   @unique @map("lot_id") @db.Uuid
+  verifierId String   @map("verifier_id") @db.Uuid
+  status     String   @default("approved")
+  signature  String?
+  issuedAt   DateTime @default(now()) @map("issued_at")
+  lot        Lot      @relation(fields: [lotId], references: [id])
+  verifier   User     @relation("certifier", fields: [verifierId], references: [id])
 
   @@map("lot_certifications")
 }
 
 model AuditLog {
-  id        String   @id @default(uuid()) @db.Uuid
-  actorId   String?  @map("actor_id") @db.Uuid
-  action    String
-  targetType String  @map("target_type")
-  targetId  String?  @map("target_id")
-  requestId String?  @map("request_id")
-  details   Json?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  actor User? @relation("audit_actor", fields: [actorId], references: [id])
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  requestId  String?  @map("request_id")
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  actor      User?    @relation("audit_actor", fields: [actorId], references: [id])
 
   @@map("audit_logs")
 }
@@ -180,34 +173,33 @@ model IdempotencyKey {
 }
 
 model SyncQueue {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String?  @map("user_id") @db.Uuid
-  actionType     String   @map("action_type")
-  payload        Json
-  status         String   @default("pending")
-  attemptCount   Int      @default(0) @map("attempt_count")
-  nextRetryAt    DateTime? @map("next_retry_at")
-  lastError      String?  @map("last_error")
-  clientRequestId String? @map("client_request_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String?   @map("user_id") @db.Uuid
+  actionType      String    @map("action_type")
+  payload         Json
+  status          String    @default("pending")
+  attemptCount    Int       @default(0) @map("attempt_count")
+  nextRetryAt     DateTime? @map("next_retry_at")
+  lastError       String?   @map("last_error")
+  clientRequestId String?   @map("client_request_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@map("sync_queue")
 }
 
 model Export {
-  id            String   @id @default(uuid()) @db.Uuid
-  exporterId    String   @map("exporter_id") @db.Uuid
-  cooperativeId String?  @map("cooperative_id") @db.Uuid
-  status        String   @default("declared")
-  manifestUrl   String?  @map("manifest_url")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  exporter    User        @relation("exporter", fields: [exporterId], references: [id])
-  cooperative Cooperative? @relation(fields: [cooperativeId], references: [id])
-  lots        ExportLot[]
-  events      ExportEvent[]
+  id            String        @id @default(uuid()) @db.Uuid
+  exporterId    String        @map("exporter_id") @db.Uuid
+  cooperativeId String?       @map("cooperative_id") @db.Uuid
+  status        String        @default("declared")
+  manifestUrl   String?       @map("manifest_url")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  events        ExportEvent[]
+  lots          ExportLot[]
+  cooperative   Cooperative?  @relation(fields: [cooperativeId], references: [id])
+  exporter      User          @relation("exporter", fields: [exporterId], references: [id])
 
   @@map("exports")
 }
@@ -216,49 +208,82 @@ model ExportLot {
   id       String @id @default(uuid()) @db.Uuid
   exportId String @map("export_id") @db.Uuid
   lotId    String @map("lot_id") @db.Uuid
-
-  export Export @relation(fields: [exportId], references: [id])
-  lot    Lot    @relation(fields: [lotId], references: [id])
+  export   Export @relation(fields: [exportId], references: [id])
+  lot      Lot    @relation(fields: [lotId], references: [id])
 
   @@unique([exportId, lotId])
   @@map("export_lots")
 }
 
 model ExportEvent {
-  id        String   @id @default(uuid()) @db.Uuid
-  exportId  String   @map("export_id") @db.Uuid
-  eventType String   @map("event_type")
+  id         String   @id @default(uuid()) @db.Uuid
+  exportId   String   @map("export_id") @db.Uuid
+  eventType  String   @map("event_type")
   occurredAt DateTime @default(now()) @map("occurred_at")
-  payload   Json?
-
-  export Export @relation(fields: [exportId], references: [id])
+  payload    Json?
+  export     Export   @relation(fields: [exportId], references: [id])
 
   @@map("export_events")
 }
 
 model ApiKey {
-  id            String   @id @default(uuid()) @db.Uuid
-  partnerName   String   @map("partner_name")
-  apiKeyHash    String   @map("api_key_hash")
-  cooperativeId String?  @map("cooperative_id") @db.Uuid
-  status        String   @default("active")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  cooperative Cooperative? @relation(fields: [cooperativeId], references: [id])
-  webhooks    WebhookSubscription[]
+  id            String                @id @default(uuid()) @db.Uuid
+  partnerName   String                @map("partner_name")
+  apiKeyHash    String                @map("api_key_hash")
+  cooperativeId String?               @map("cooperative_id") @db.Uuid
+  status        String                @default("active")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  cooperative   Cooperative?          @relation(fields: [cooperativeId], references: [id])
+  webhooks      WebhookSubscription[]
 
   @@map("api_keys")
 }
 
 model WebhookSubscription {
-  id       String   @id @default(uuid()) @db.Uuid
-  apiKeyId String   @map("api_key_id") @db.Uuid
-  url      String
-  secret   String
-  status   String   @default("active")
+  id        String   @id @default(uuid()) @db.Uuid
+  apiKeyId  String   @map("api_key_id") @db.Uuid
+  url       String
+  secret    String
+  status    String   @default("active")
   createdAt DateTime @default(now()) @map("created_at")
-
-  apiKey ApiKey @relation(fields: [apiKeyId], references: [id])
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id])
 
   @@map("webhook_subscriptions")
+}
+
+// ==========================================
+// AUDIO COLLECTOR MODULE (Isolated)
+// ==========================================
+
+model AudioLanguage {
+  code      String             @id @db.VarChar(10) // 'ee', 'kbp'
+  name      String             @db.VarChar(50)     // 'Ewe', 'Kabyè'
+  phrases   AudioTranslation[]
+
+  @@map("audio_languages")
+}
+
+model AudioPhrase {
+  key          String             @id @db.VarChar(100) // 'welcome_msg', 'btn_new_harvest'
+  frenchText   String
+  translations AudioTranslation[]
+
+  @@map("audio_phrases")
+}
+
+model AudioTranslation {
+  id           String        @id @default(uuid()) @db.Uuid
+  phraseKey    String        @map("phrase_key") @db.VarChar(100)
+  langCode     String        @map("lang_code") @db.VarChar(10)
+  audioUrl     String?       @map("audio_url")
+  status       String        @default("PENDING") @db.VarChar(20) // PENDING, RECORDED
+  history      Json?         @default("[]") // Store previous audioUrls when rejected
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  phrase       AudioPhrase   @relation(fields: [phraseKey], references: [key])
+  language     AudioLanguage @relation(fields: [langCode], references: [code])
+
+  @@unique([phraseKey, langCode])
+  @@map("audio_translations")
 }

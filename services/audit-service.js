@@ -25,13 +25,39 @@ async function list(prisma, query) {
     where.action = query.action;
   }
 
+  if (query.date) {
+    const startOfDay = new Date(query.date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(query.date);
+    endOfDay.setHours(23, 59, 59, 999);
+    where.createdAt = { gte: startOfDay, lte: endOfDay };
+  }
+
+  if (query.role || query.search) {
+    where.actor = {};
+    if (query.role) {
+      where.actor.role = query.role;
+    }
+    if (query.search) {
+      where.actor.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { email: { contains: query.search, mode: 'insensitive' } }
+      ];
+    }
+  }
+
   const [total, items] = await Promise.all([
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       skip,
-      take: pageSize
+      take: pageSize,
+      include: {
+        actor: {
+          select: { name: true, email: true, role: true }
+        }
+      }
     })
   ]);
 

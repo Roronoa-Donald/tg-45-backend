@@ -17,7 +17,8 @@ module.exports = async function verificationRoutes(app) {
       request.params.id,
       payload.status,
       request.user.sub,
-      payload.reason
+      payload.reason,
+      payload.gps
     );
 
     await auditService.log(app.prisma, {
@@ -54,7 +55,8 @@ module.exports = async function verificationRoutes(app) {
       app.prisma,
       request.params.id,
       request.user.sub,
-      payload.signature
+      payload.signature,
+      payload.gps
     );
 
     return successEnvelope(certification);

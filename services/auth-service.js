@@ -9,6 +9,10 @@ async function login(prisma, identifier, secret) {
     throw new AppError('invalid_credentials', 'Invalid credentials', 401);
   }
 
+  if (user.status === 'pending') {
+    throw new AppError('pending_approval', "Votre compte est en attente d'approbation, veuillez patienter.", 403);
+  }
+
   if (user.status !== 'active') {
     throw new AppError('account_disabled', 'Account disabled', 403);
   }

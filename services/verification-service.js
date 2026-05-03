@@ -10,7 +10,7 @@ const STATUS_TRANSITIONS = {
   [LOT_STATUS.REJECTED]: []
 };
 
-async function assignStatus(prisma, lotId, status, actorId, reason) {
+async function assignStatus(prisma, lotId, status, actorId, reason, gps) {
   const lot = await lotRepository.findLotById(prisma, lotId);
   if (!lot) {
     throw new AppError('not_found', 'Lot not found', 404);
@@ -32,7 +32,7 @@ async function assignStatus(prisma, lotId, status, actorId, reason) {
     lotId,
     actorId,
     eventType: LOT_EVENT_TYPES.VERIFY,
-    metadata: { status, reason }
+    metadata: { status, reason, gps }
   });
   return updated;
 }
@@ -53,7 +53,7 @@ async function submitProof(prisma, lotId, actorId, payload) {
   return { lotId };
 }
 
-async function certify(prisma, lotId, actorId, signature) {
+async function certify(prisma, lotId, actorId, signature, gps) {
   const lot = await lotRepository.findLotById(prisma, lotId);
   if (!lot) {
     throw new AppError('not_found', 'Lot not found', 404);
@@ -83,7 +83,7 @@ async function certify(prisma, lotId, actorId, signature) {
         lotId,
         actorId,
         eventType: LOT_EVENT_TYPES.CERTIFY,
-        metadata: { status: LOT_STATUS.CERTIFIED }
+        metadata: { status: LOT_STATUS.CERTIFIED, gps }
       }
     });
 

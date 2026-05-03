@@ -9,4 +9,7 @@ module.exports = async function registerRoutes(app) {
   await app.register(require('./public'), { prefix: '/public' });
   await app.register(require('./partners'), { prefix: '/partners' });
   await app.register(require('./sync'), { prefix: '/sync' });
+  await app.register(require('./admin'), { prefix: '/admin' });
+  await app.register(require('./ministry'), { prefix: '/ministry' });
+  await app.register(require('./audio-collector'), { prefix: '/audio-collector' });
 };
