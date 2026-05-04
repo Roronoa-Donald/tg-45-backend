@@ -88,7 +88,9 @@ model Lot {
   gpsOriginLng        Decimal           @map("gps_origin_lng") @db.Decimal(10, 6)
   gpsPrecisionM       Int               @map("gps_precision_m")
   gpsAreaRadiusM      Int               @default(100) @map("gps_area_radius_m")
-  status              String            @default("registered")
+  status              String            @default("registered") // pending_transcription, registered
+  scaleImageUrl       String?           @map("scale_image_url")
+  coopProofImageUrl   String?           @map("coop_proof_image_url")
   blockchainTxHash    String?           @map("blockchain_tx_hash")
   blockchainProofHash String?           @map("blockchain_proof_hash")
   createdAt           DateTime          @default(now()) @map("created_at")
