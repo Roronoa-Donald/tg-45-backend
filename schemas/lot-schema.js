@@ -3,7 +3,7 @@ const { z } = require('zod');
 const lotRegisterSchema = z.object({
   product: z.string().min(2),
   variety: z.string().optional(),
-  weightKg: z.number().min(0),
+  weightKg: z.number().nonnegative().default(0),
   harvestDate: z.string().datetime().optional(),
   gpsOriginLat: z.number(),
   gpsOriginLng: z.number(),
