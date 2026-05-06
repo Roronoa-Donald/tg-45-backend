@@ -9,21 +9,27 @@ module.exports = async function ministryRoutes(app) {
   app.get('/kpis', {
     preHandler: [authenticate, requireRole([USER_ROLES.MINISTRY])]
   }, async (request) => {
-    // Total lots certified
+    // Total lots certified (status starts with 'certified')
     const certifiedLotsCount = await app.prisma.lot.count({
-      where: { status: { in: [LOT_STATUS.CERTIFIED, LOT_STATUS.EXPORTED, LOT_STATUS.SHIPPED] } }
+      where: { status: { startsWith: 'certified' } }
     });
 
     // Total weight certified
     const certifiedLots = await app.prisma.lot.findMany({
-      where: { status: { in: [LOT_STATUS.CERTIFIED, LOT_STATUS.EXPORTED, LOT_STATUS.SHIPPED] } },
+      where: { status: { startsWith: 'certified' } },
       select: { weightKg: true }
     });
     const totalWeightKg = certifiedLots.reduce((acc, lot) => acc + Number(lot.weightKg), 0);
 
-    // Total lots exported/shipped
+    // Total lots exported/shipped (status contains 'shipped', 'exported', or 'delivered')
     const exportedLotsCount = await app.prisma.lot.count({
-      where: { status: { in: [LOT_STATUS.EXPORTED, LOT_STATUS.SHIPPED] } }
+      where: {
+        OR: [
+          { status: { contains: 'shipped' } },
+          { status: { contains: 'exported' } },
+          { status: { contains: 'delivered' } }
+        ]
+      }
     });
 
     // Rejections (by validators or cooperatives)
@@ -79,6 +85,33 @@ module.exports = async function ministryRoutes(app) {
       targetType: 'user',
       targetId: id,
       requestId: request.id
+    });
+
+    return successEnvelope(updated);
+  });
+
+  // 4. Reject a user
+  app.post('/reject-user/:id', {
+    preHandler: [authenticate, requireRole([USER_ROLES.MINISTRY])]
+  }, async (request) => {
+    const { id } = request.params;
+    const { reason } = request.body || {};
+    
+    const user = await app.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new AppError('not_found', 'User not found', 404);
+
+    const updated = await app.prisma.user.update({
+      where: { id },
+      data: { status: 'rejected' }
+    });
+
+    await auditService.log(app.prisma, {
+      actorId: request.user.sub,
+      action: 'reject_actor',
+      targetType: 'user',
+      targetId: id,
+      requestId: request.id,
+      details: { reason: reason || 'Refusé par le ministère' }
     });
 
     return successEnvelope(updated);

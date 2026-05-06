@@ -22,7 +22,10 @@ async function declareExport(prisma, exporterId, payload) {
     throw new AppError('not_found', 'Lot not found', 404);
   }
 
-  const invalid = lots.find((lot) => lot.status !== LOT_STATUS.CERTIFIED);
+  const invalid = lots.find((lot) => {
+    const baseStatus = lot.status.split(';')[0];
+    return baseStatus !== LOT_STATUS.CERTIFIED;
+  });
   if (invalid) {
     throw new AppError('invalid_lot_status', 'Only certified lots can be exported', 400);
   }
@@ -45,7 +48,7 @@ async function declareExport(prisma, exporterId, payload) {
 
     await tx.lot.updateMany({
       where: { id: { in: payload.lotIds } },
-      data: { status: LOT_STATUS.SHIPPED }
+      data: { status: 'certified;shipped' }
     });
 
     await tx.exportEvent.create({

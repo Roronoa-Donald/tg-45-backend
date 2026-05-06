@@ -7,6 +7,15 @@ const cooperativeService = require('../../services/cooperative-service');
 const auditService = require('../../services/audit-service');
 
 module.exports = async function cooperativeRoutes(app) {
+  app.get('/', {
+    preHandler: [authenticate]
+  }, async () => {
+    const cooperatives = await app.prisma.cooperative.findMany({
+      orderBy: { name: 'asc' }
+    });
+    return successEnvelope(cooperatives);
+  });
+
   app.post('/', {
     preHandler: [authenticate, requireRole([USER_ROLES.ADMIN])],
   }, async (request) => {

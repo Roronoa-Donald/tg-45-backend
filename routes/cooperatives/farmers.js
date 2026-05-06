@@ -16,33 +16,32 @@ module.exports = async function cooperativeFarmersRoutes(app) {
       throw new AppError('forbidden', 'You can only access your own cooperative data', 403);
     }
 
-    const pendingFarmers = await app.prisma.user.findMany({
+    const pendingMemberships = await app.prisma.cooperativeMember.findMany({
       where: {
         cooperativeId: id,
-        role: USER_ROLES.FARMER,
-        status: 'pending'
+        role: 'pending'
       },
       include: {
-        farmerProfile: true
+        user: {
+          include: { farmerProfile: true }
+        }
       },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      orderBy: { createdAt: 'desc' }
     });
 
-    return successEnvelope(pendingFarmers.map(user => ({
-      id: user.id,
-      name: user.name,
-      phone: user.phone,
-      email: user.email,
-      farmName: user.farmerProfile?.farmName,
-      location: user.farmerProfile?.location,
-      createdAt: user.createdAt
+    return successEnvelope(pendingMemberships.map(m => ({
+      id: m.user.id,
+      name: m.user.name,
+      phone: m.user.phone,
+      email: m.user.email,
+      farmName: m.user.farmerProfile?.farmName,
+      location: m.user.farmerProfile?.location,
+      createdAt: m.createdAt
     })));
   });
 
-  // Approve a pending farmer
-  app.put('/:id/farmers/:farmerId/approve', {
+  // Approve a pending farmer (accept-join)
+  app.put('/:id/farmers/:farmerId/accept-join', {
     preHandler: [authenticate, requireRole([USER_ROLES.COOPERATIVE])]
   }, async (request) => {
     const { id, farmerId } = request.params;
@@ -51,33 +50,74 @@ module.exports = async function cooperativeFarmersRoutes(app) {
       throw new AppError('forbidden', 'You can only approve farmers for your own cooperative', 403);
     }
 
-    const farmer = await app.prisma.user.findFirst({
+    const membership = await app.prisma.cooperativeMember.findUnique({
       where: {
-        id: farmerId,
-        cooperativeId: id,
-        role: USER_ROLES.FARMER,
-        status: 'pending'
+        cooperativeId_userId: { cooperativeId: id, userId: farmerId }
       }
     });
 
-    if (!farmer) {
-      throw new AppError('not_found', 'Pending farmer not found for this cooperative', 404);
+    if (!membership || membership.role !== 'pending') {
+      throw new AppError('not_found', 'Pending join request not found', 404);
     }
 
-    const updated = await app.prisma.user.update({
-      where: { id: farmerId },
-      data: { status: 'active' }
-    });
+    // Update membership role and also link user's cooperativeId
+    await app.prisma.$transaction([
+      app.prisma.cooperativeMember.update({
+        where: { id: membership.id },
+        data: { role: 'active' }
+      }),
+      app.prisma.user.update({
+        where: { id: farmerId },
+        data: { cooperativeId: id }
+      })
+    ]);
 
     await auditService.log(app.prisma, {
       actorId: request.user.sub,
-      action: 'approve_farmer',
+      action: 'approve_farmer_join',
       targetType: 'user',
       targetId: farmerId,
       requestId: request.id,
       details: { cooperativeId: id }
     });
 
-    return successEnvelope(updated);
+    return successEnvelope({ success: true });
+  });
+
+  // Farmer sends a join request to a cooperative
+  app.post('/:id/join-request', {
+    preHandler: [authenticate, requireRole([USER_ROLES.FARMER])]
+  }, async (request) => {
+    const { id } = request.params;
+    const farmerId = request.user.sub;
+
+    const coop = await app.prisma.cooperative.findUnique({ where: { id } });
+    if (!coop) throw new AppError('not_found', 'Cooperative not found', 404);
+
+    const existing = await app.prisma.cooperativeMember.findUnique({
+      where: { cooperativeId_userId: { cooperativeId: id, userId: farmerId } }
+    });
+
+    if (existing) {
+      throw new AppError('already_exists', 'Join request already sent or active', 400);
+    }
+
+    const membership = await app.prisma.cooperativeMember.create({
+      data: {
+        cooperativeId: id,
+        userId: farmerId,
+        role: 'pending'
+      }
+    });
+
+    await auditService.log(app.prisma, {
+      actorId: farmerId,
+      action: 'request_join_cooperative',
+      targetType: 'cooperative',
+      targetId: id,
+      requestId: request.id
+    });
+
+    return successEnvelope(membership);
   });
 };

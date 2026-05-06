@@ -83,7 +83,7 @@ module.exports = async function cooperativeExportsRoutes(app) {
         // Update lot status to exported
         await tx.lot.update({
           where: { id: lot.id },
-          data: { status: 'exported' } // exported status
+          data: { status: 'certified;exported' } // double-badge format
         });
 
         // Link lot to export

@@ -13,6 +13,10 @@ async function login(prisma, identifier, secret) {
     throw new AppError('pending_approval', "Votre compte est en attente d'approbation, veuillez patienter.", 403);
   }
 
+  if (user.status === 'rejected') {
+    throw new AppError('account_rejected', "Votre inscription a été refusée par le ministère. Veuillez contacter l'administration.", 403);
+  }
+
   if (user.status !== 'active') {
     throw new AppError('account_disabled', 'Account disabled', 403);
   }

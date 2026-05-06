@@ -29,6 +29,8 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
           gpsOriginLng: payload.gpsOriginLng,
           gpsPrecisionM: payload.gpsPrecisionM,
           gpsAreaRadiusM: 100,
+          scaleImageUrl: payload.scaleImageUrl || null,
+          coopProofImageUrl: payload.coopProofImageUrl || null,
           status: LOT_STATUS.REGISTERED
         });
 

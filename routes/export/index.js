@@ -54,7 +54,7 @@ module.exports = async function exportRoutes(app) {
       for (const el of exp.lots) {
         await tx.lot.update({
           where: { id: el.lotId },
-          data: { status: LOT_STATUS.SHIPPED } // or 'delivered' / final state
+          data: { status: 'certified;delivered' } // double-badge: keeps certification, marks as delivered
         });
 
         // Add GPS event to traceability map
@@ -108,7 +108,7 @@ module.exports = async function exportRoutes(app) {
         // Revert lot status to certified so cooperative can re-export
         await tx.lot.update({
           where: { id: el.lotId },
-          data: { status: LOT_STATUS.CERTIFIED } 
+          data: { status: LOT_STATUS.CERTIFIED } // revert: remove shipping badge
         });
 
         await tx.lotEvent.create({

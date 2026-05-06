@@ -10,15 +10,37 @@ const STATUS_TRANSITIONS = {
   [LOT_STATUS.REJECTED]: []
 };
 
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 async function assignStatus(prisma, lotId, status, actorId, reason, gps) {
   const lot = await lotRepository.findLotById(prisma, lotId);
   if (!lot) {
     throw new AppError('not_found', 'Lot not found', 404);
   }
 
-  const allowed = STATUS_TRANSITIONS[lot.status] || [];
+  // Check distance if validating
+  if (status === LOT_STATUS.VALIDATED && gps && gps.lat && gps.lng && lot.gpsOriginLat && lot.gpsOriginLng) {
+    const distance = getDistanceKm(lot.gpsOriginLat, lot.gpsOriginLng, gps.lat, gps.lng);
+    if (distance > 50) {
+      throw new AppError('gps_too_far', `La coopérative est trop éloignée du lieu de récolte (${Math.round(distance)}km > 50km)`, 403);
+    }
+  }
+
+  // Parse double-badge format: 'certified;shipped' → base status 'certified'
+  const baseStatus = lot.status.split(';')[0];
+  
+  const allowed = STATUS_TRANSITIONS[baseStatus] || [];
   if (!allowed.includes(status)) {
-    if (lot.status === status) {
+    if (baseStatus === status) {
       return lot;
     }
     throw new AppError('invalid_transition', 'Invalid status transition', 400, {
