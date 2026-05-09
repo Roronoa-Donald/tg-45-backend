@@ -26,6 +26,10 @@ model User {
   certifications         LotCertification[]  @relation("certifier")
   lotEvents              LotEvent[]          @relation("lot_actor")
   lots                   Lot[]               @relation("lot_owner")
+  parcels                Parcel[]
+  eudrDiligenceCreated    EudrDueDiligence[]  @relation("eudr_creator")
+  eudrDiligenceApproved   EudrDueDiligence[]  @relation("eudr_approver")
+  eudrDeclarations        EudrDeclaration[]   @relation("eudr_submitter")
   cooperative            Cooperative?        @relation("CooperativeUsers", fields: [cooperativeId], references: [id])
 
   @@map("users")
@@ -44,6 +48,7 @@ model Cooperative {
   members     CooperativeMember[]
   exports     Export[]
   lots        Lot[]
+  parcels     Parcel[]
   users       User[]              @relation("CooperativeUsers")
 
   @@map("cooperatives")
@@ -82,13 +87,19 @@ model Lot {
   cooperativeId       String?           @map("cooperative_id") @db.Uuid
   product             String
   variety             String?
+  hsCode              String?           @map("hs_code") @db.VarChar(16)
+  originCountry       String?           @map("origin_country") @db.VarChar(3)
+  originRegion        String?           @map("origin_region") @db.VarChar(120)
   weightKg            Decimal           @map("weight_kg") @db.Decimal(10, 2)
   harvestDate         DateTime?         @map("harvest_date")
+  productionStartDate DateTime?         @map("production_start_date")
+  productionEndDate   DateTime?         @map("production_end_date")
   gpsOriginLat        Decimal           @map("gps_origin_lat") @db.Decimal(10, 6)
   gpsOriginLng        Decimal           @map("gps_origin_lng") @db.Decimal(10, 6)
   gpsPrecisionM       Int               @map("gps_precision_m")
   gpsAreaRadiusM      Int               @default(100) @map("gps_area_radius_m")
   status              String            @default("registered") // pending_transcription, registered
+  eudrStatus          String            @default("not_started") @map("eudr_status") @db.VarChar(32)
   scaleImageUrl       String?           @map("scale_image_url")
   coopProofImageUrl   String?           @map("coop_proof_image_url")
   blockchainTxHash    String?           @map("blockchain_tx_hash")
@@ -99,10 +110,13 @@ model Lot {
   certification       LotCertification?
   events              LotEvent[]
   images              LotImage[]
+  parcels             LotParcel[]
+  eudrDueDiligence     EudrDueDiligence?
   cooperative         Cooperative?      @relation(fields: [cooperativeId], references: [id])
   owner               User              @relation("lot_owner", fields: [ownerId], references: [id])
 
   @@map("lots")
+  @@index([eudrStatus])
 }
 
 model LotEvent {
@@ -195,15 +209,18 @@ model Export {
   exporterId    String        @map("exporter_id") @db.Uuid
   cooperativeId String?       @map("cooperative_id") @db.Uuid
   status        String        @default("declared")
+  eudrStatus    String        @default("not_started") @map("eudr_status") @db.VarChar(32)
   manifestUrl   String?       @map("manifest_url")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   events        ExportEvent[]
   lots          ExportLot[]
+  eudrDueDiligence EudrDueDiligence?
   cooperative   Cooperative?  @relation(fields: [cooperativeId], references: [id])
   exporter      User          @relation("exporter", fields: [exporterId], references: [id])
 
   @@map("exports")
+  @@index([eudrStatus])
 }
 
 model ExportLot {
@@ -226,6 +243,134 @@ model ExportEvent {
   export     Export   @relation(fields: [exportId], references: [id])
 
   @@map("export_events")
+}
+
+model Parcel {
+  id           String    @id @default(uuid()) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  cooperativeId String?  @map("cooperative_id") @db.Uuid
+  name         String?   @db.VarChar(120)
+  countryCode  String?   @map("country_code") @db.VarChar(3)
+  region       String?   @db.VarChar(120)
+  district     String?   @db.VarChar(120)
+  locality     String?   @db.VarChar(120)
+  geometryType String    @map("geometry_type") @db.VarChar(16)
+  geometry     Json
+  areaHa       Decimal?  @map("area_ha") @db.Decimal(10, 2)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lots         LotParcel[]
+  deforestationChecks EudrDeforestationCheck[]
+  owner        User      @relation(fields: [ownerId], references: [id])
+  cooperative  Cooperative? @relation(fields: [cooperativeId], references: [id])
+
+  @@map("parcels")
+  @@index([ownerId])
+  @@index([cooperativeId])
+}
+
+model LotParcel {
+  id        String   @id @default(uuid()) @db.Uuid
+  lotId     String   @map("lot_id") @db.Uuid
+  parcelId  String   @map("parcel_id") @db.Uuid
+  sharePct  Decimal? @map("share_pct") @db.Decimal(5, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  lot       Lot      @relation(fields: [lotId], references: [id])
+  parcel    Parcel   @relation(fields: [parcelId], references: [id])
+
+  @@unique([lotId, parcelId])
+  @@map("lot_parcels")
+  @@index([lotId])
+  @@index([parcelId])
+}
+
+model EudrDueDiligence {
+  id                 String    @id @default(uuid()) @db.Uuid
+  lotId              String?   @unique @map("lot_id") @db.Uuid
+  exportId           String?   @unique @map("export_id") @db.Uuid
+  status             String    @default("draft") @db.VarChar(32)
+  riskLevel          String?   @map("risk_level") @db.VarChar(16)
+  assessmentSummary  String?   @map("assessment_summary")
+  mitigationSummary  String?   @map("mitigation_summary")
+  createdBy          String    @map("created_by") @db.Uuid
+  approvedBy         String?   @map("approved_by") @db.Uuid
+  approvedAt         DateTime? @map("approved_at")
+  declarationRef     String?   @map("declaration_ref") @db.VarChar(64)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lot                Lot?      @relation(fields: [lotId], references: [id])
+  export             Export?   @relation(fields: [exportId], references: [id])
+  creator            User      @relation("eudr_creator", fields: [createdBy], references: [id])
+  approver           User?     @relation("eudr_approver", fields: [approvedBy], references: [id])
+  documents          EudrDocument[]
+  legalityChecks     EudrLegalityCheck[]
+  declarations       EudrDeclaration[]
+
+  @@map("eudr_due_diligence")
+  @@index([status])
+  @@index([lotId])
+  @@index([exportId])
+}
+
+model EudrDocument {
+  id        String   @id @default(uuid()) @db.Uuid
+  ddId      String   @map("dd_id") @db.Uuid
+  docType   String   @map("doc_type") @db.VarChar(64)
+  url       String
+  checksum  String?
+  issuedAt  DateTime? @map("issued_at")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  dd        EudrDueDiligence @relation(fields: [ddId], references: [id])
+
+  @@map("eudr_documents")
+  @@index([ddId])
+}
+
+model EudrDeforestationCheck {
+  id         String   @id @default(uuid()) @db.Uuid
+  parcelId   String   @map("parcel_id") @db.Uuid
+  source     String   @db.VarChar(64)
+  checkDate  DateTime @map("check_date")
+  result     String   @db.VarChar(32)
+  confidence Decimal? @db.Decimal(5, 2)
+  evidenceUrl String? @map("evidence_url")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  parcel     Parcel   @relation(fields: [parcelId], references: [id])
+
+  @@map("eudr_deforestation_checks")
+  @@index([parcelId])
+}
+
+model EudrLegalityCheck {
+  id         String   @id @default(uuid()) @db.Uuid
+  ddId       String   @map("dd_id") @db.Uuid
+  checkType  String   @map("check_type") @db.VarChar(64)
+  status     String   @db.VarChar(32)
+  evidenceUrl String? @map("evidence_url")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  dd         EudrDueDiligence @relation(fields: [ddId], references: [id])
+
+  @@map("eudr_legality_checks")
+  @@index([ddId])
+}
+
+model EudrDeclaration {
+  id          String   @id @default(uuid()) @db.Uuid
+  ddId        String   @map("dd_id") @db.Uuid
+  payloadJson Json     @map("payload_json")
+  referenceNo String?  @map("reference_no") @db.VarChar(64)
+  submittedBy String?  @map("submitted_by") @db.Uuid
+  submittedAt DateTime? @map("submitted_at")
+  status      String   @default("draft") @db.VarChar(32)
+  createdAt   DateTime @default(now()) @map("created_at")
+  dd          EudrDueDiligence @relation(fields: [ddId], references: [id])
+  submitter   User?    @relation("eudr_submitter", fields: [submittedBy], references: [id])
+
+  @@map("eudr_declarations")
+  @@index([ddId])
 }
 
 model ApiKey {

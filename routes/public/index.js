@@ -5,6 +5,7 @@ function buildPublicLot(lot) {
   return {
     lotCode: lot.lotCode,
     status: lot.status,
+    eudrStatus: lot.eudrStatus,
     gps: {
       lat: lot.gpsOriginLat,
       lng: lot.gpsOriginLng,
@@ -23,6 +24,11 @@ function buildPublicLot(lot) {
     images: lot.images.map((image) => ({
       url: image.url,
       isPrimary: image.isPrimary
+    })),
+    parcels: (lot.parcels || []).map((link) => ({
+      id: link.parcel.id,
+      geometryType: link.parcel.geometryType,
+      areaHa: link.parcel.areaHa
     }))
   };
 }

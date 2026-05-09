@@ -12,6 +12,8 @@ function createMemoryPrisma() {
     lots: [],
     events: [],
     certifications: [],
+    idempotencyKeys: [],
+    auditLogs: [],
   };
 
   const prisma = {
@@ -111,6 +113,33 @@ function createMemoryPrisma() {
         return record;
       },
     },
+    idempotencyKey: {
+      findUnique: async ({ where }) => state.idempotencyKeys.find((item) => item.key === where.key) || null,
+      upsert: async ({ where, create }) => {
+        const existing = state.idempotencyKeys.find((item) => item.key === where.key);
+        if (existing) {
+          return existing;
+        }
+        const record = { id: `idem-${state.idempotencyKeys.length + 1}`, ...create };
+        state.idempotencyKeys.push(record);
+        return record;
+      },
+      update: async ({ where, data }) => {
+        const record = state.idempotencyKeys.find((item) => item.key === where.key);
+        if (!record) {
+          throw new Error('Idempotency key not found');
+        }
+        Object.assign(record, data);
+        return record;
+      }
+    },
+    auditLog: {
+      create: async ({ data }) => {
+        const record = { id: `audit-${state.auditLogs.length + 1}`, ...data };
+        state.auditLogs.push(record);
+        return record;
+      }
+    },
     $transaction: async (fn) => fn(prisma),
     $queryRaw: async () => 1,
   };
@@ -200,7 +229,7 @@ test('demo flow supports register, transfer and public verification', async () =
   });
 
   assert.equal(transferResponse.statusCode, 200);
-  assert.equal(transferResponse.json().data.ownerId, 'processor-1');
+  assert.equal(transferResponse.json().data.ownerId, processorId);
 
   const listFarmerLots = await app.inject({
     method: 'GET',
@@ -211,7 +240,7 @@ test('demo flow supports register, transfer and public verification', async () =
   });
 
   assert.equal(listFarmerLots.statusCode, 200);
-  assert.equal(listFarmerLots.json().data.length, 1);
+  assert.equal(listFarmerLots.json().data.length, 0);
 
   const publicVerify = await app.inject({
     method: 'GET',

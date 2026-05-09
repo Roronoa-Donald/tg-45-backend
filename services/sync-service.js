@@ -1,6 +1,8 @@
 const syncRepo = require('../repositories/sync-queue-repository');
 const lotService = require('./lot-service');
 const verificationService = require('./verification-service');
+const parcelService = require('./parcel-service');
+const ddrService = require('./eudr-ddr-service');
 
 /**
  * Process a single sync action immediately.
@@ -45,6 +47,31 @@ async function processAction(prisma, blockchain, userId, action) {
           payload.newOwnerId,
           userId
         );
+        break;
+
+      case 'createParcel':
+        result = await parcelService.createParcel(prisma, payload, userId);
+        break;
+
+      case 'updateParcel':
+        result = await parcelService.updateParcel(prisma, payload.id, payload);
+        break;
+
+      case 'linkLotParcel':
+        result = await parcelService.linkLotParcel(
+          prisma,
+          payload.lotId,
+          payload.parcelId,
+          payload.sharePct
+        );
+        break;
+
+      case 'createEudrDdr':
+        result = await ddrService.createDueDiligence(prisma, payload, userId);
+        break;
+
+      case 'updateEudrDdr':
+        result = await ddrService.updateDueDiligence(prisma, payload.id, payload);
         break;
 
       default:

@@ -143,6 +143,17 @@ module.exports = async function exportRoutes(app) {
       where: { id: request.params.id },
       include: { lots: { include: { lot: true } }, cooperative: true }
     });
+    if (!exportRecord) {
+      throw new AppError('not_found', 'Export not found', 404);
+    }
+
+    if (request.user.role === USER_ROLES.EXPORTER && exportRecord.exporterId !== request.user.sub) {
+      throw new AppError('forbidden', 'You cannot access this export', 403);
+    }
+
+    if (request.user.role === USER_ROLES.COOPERATIVE && exportRecord.cooperativeId !== request.user.cooperativeId) {
+      throw new AppError('forbidden', 'You cannot access this export', 403);
+    }
     return successEnvelope(exportRecord);
   });
 };

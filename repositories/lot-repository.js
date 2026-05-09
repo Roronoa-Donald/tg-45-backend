@@ -11,7 +11,9 @@ async function findLotById(prisma, id) {
         include: { actor: { select: { name: true } } }
       },
       images: true,
-      certification: true
+      certification: true,
+      parcels: { include: { parcel: true } },
+      eudrDueDiligence: true
     }
   });
 }
@@ -25,7 +27,9 @@ async function findLotByCode(prisma, lotCode) {
         include: { actor: { select: { name: true } } }
       },
       images: true,
-      certification: true
+      certification: true,
+      parcels: { include: { parcel: true } },
+      eudrDueDiligence: true
     }
   });
 }

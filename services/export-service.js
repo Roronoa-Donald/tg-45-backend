@@ -1,5 +1,5 @@
 const { AppError } = require('../utils/errors');
-const { EXPORT_STATUS, EXPORT_EVENT_TYPES, LOT_STATUS } = require('../config/constants');
+const { EXPORT_STATUS, EXPORT_EVENT_TYPES, LOT_STATUS, EUDR_STATUS } = require('../config/constants');
 const webhookService = require('./webhook-service');
 
 async function notifyWebhooks(prisma, payload) {
@@ -14,6 +14,23 @@ async function notifyWebhooks(prisma, payload) {
 }
 
 async function declareExport(prisma, exporterId, payload) {
+  let dd = null;
+  if (payload.ddId) {
+    dd = await prisma.eudrDueDiligence.findUnique({ where: { id: payload.ddId } });
+    if (!dd) {
+      throw new AppError('not_found', 'Due diligence not found', 404);
+    }
+    if (dd.exportId) {
+      throw new AppError('conflict', 'Due diligence already linked to export', 409);
+    }
+    if (![EUDR_STATUS.APPROVED, EUDR_STATUS.SUBMITTED].includes(dd.status)) {
+      throw new AppError('eudr_not_ready', 'Export due diligence not approved', 400, {
+        ddId: dd.id,
+        status: dd.status
+      });
+    }
+  }
+
   const lots = await prisma.lot.findMany({
     where: { id: { in: payload.lotIds } }
   });
@@ -30,6 +47,14 @@ async function declareExport(prisma, exporterId, payload) {
     throw new AppError('invalid_lot_status', 'Only certified lots can be exported', 400);
   }
 
+  const notEudrReady = lots.find((lot) => ![EUDR_STATUS.APPROVED, EUDR_STATUS.SUBMITTED].includes(lot.eudrStatus));
+  if (notEudrReady) {
+    throw new AppError('eudr_not_ready', 'Lot EUDR dossier not approved', 400, {
+      lotId: notEudrReady.id,
+      eudrStatus: notEudrReady.eudrStatus
+    });
+  }
+
   const exportRecord = await prisma.$transaction(async (tx) => {
     const created = await tx.export.create({
       data: {
@@ -38,6 +63,26 @@ async function declareExport(prisma, exporterId, payload) {
         status: EXPORT_STATUS.DECLARED
       }
     });
+
+    if (dd) {
+      await tx.eudrDueDiligence.update({
+        where: { id: dd.id },
+        data: { exportId: created.id }
+      });
+
+      await tx.export.update({
+        where: { id: created.id },
+        data: { eudrStatus: dd.status }
+      });
+
+      await tx.exportEvent.create({
+        data: {
+          exportId: created.id,
+          eventType: EXPORT_EVENT_TYPES.EUDR_STATUS_UPDATE,
+          payload: { ddId: dd.id, status: dd.status }
+        }
+      });
+    }
 
     await tx.exportLot.createMany({
       data: payload.lotIds.map((lotId) => ({
@@ -55,7 +100,7 @@ async function declareExport(prisma, exporterId, payload) {
       data: {
         exportId: created.id,
         eventType: EXPORT_EVENT_TYPES.CREATED,
-        payload: { lotIds: payload.lotIds }
+        payload: { lotIds: payload.lotIds, ddId: payload.ddId || null }
       }
     });
 

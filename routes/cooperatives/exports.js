@@ -1,7 +1,9 @@
 const { authenticate, requireRole } = require('../../utils/auth-hooks');
+const { parseOrThrow } = require('../../utils/schema');
 const { successEnvelope } = require('../../utils/response');
-const { USER_ROLES, LOT_STATUS } = require('../../config/constants');
+const { USER_ROLES, LOT_STATUS, EUDR_STATUS, EXPORT_EVENT_TYPES } = require('../../config/constants');
 const { AppError } = require('../../utils/errors');
+const { cooperativeExportSchema } = require('../../schemas/export-schema');
 const auditService = require('../../services/audit-service');
 
 module.exports = async function cooperativeExportsRoutes(app) {
@@ -33,11 +35,7 @@ module.exports = async function cooperativeExportsRoutes(app) {
       throw new AppError('forbidden', 'You can only export for your own cooperative', 403);
     }
 
-    const { exporterId, lots } = request.body; // lots is array of { id, weightKg }
-
-    if (!exporterId || !lots || lots.length === 0) {
-      throw new AppError('bad_request', 'Missing exporterId or lots payload', 400);
-    }
+    const { exporterId, lots, ddId } = parseOrThrow(cooperativeExportSchema, request.body);
 
     // Verify exporter is active
     const exporter = await app.prisma.user.findFirst({
@@ -58,6 +56,40 @@ module.exports = async function cooperativeExportsRoutes(app) {
         }
       });
 
+      if (ddId) {
+        const dd = await tx.eudrDueDiligence.findUnique({ where: { id: ddId } });
+        if (!dd) {
+          throw new AppError('not_found', 'Due diligence not found', 404);
+        }
+        if (dd.exportId) {
+          throw new AppError('conflict', 'Due diligence already linked to export', 409);
+        }
+        if (![EUDR_STATUS.APPROVED, EUDR_STATUS.SUBMITTED].includes(dd.status)) {
+          throw new AppError('eudr_not_ready', 'Export due diligence not approved', 400, {
+            ddId: dd.id,
+            status: dd.status
+          });
+        }
+
+        await tx.eudrDueDiligence.update({
+          where: { id: ddId },
+          data: { exportId: exp.id }
+        });
+
+        await tx.export.update({
+          where: { id: exp.id },
+          data: { eudrStatus: dd.status }
+        });
+
+        await tx.exportEvent.create({
+          data: {
+            exportId: exp.id,
+            eventType: EXPORT_EVENT_TYPES.EUDR_STATUS_UPDATE,
+            payload: { ddId, status: dd.status }
+          }
+        });
+      }
+
       // 2. Process each lot
       for (const lotInput of lots) {
         const lot = await tx.lot.findFirst({
@@ -72,8 +104,15 @@ module.exports = async function cooperativeExportsRoutes(app) {
           throw new AppError('invalid_lot', `Lot ${lotInput.id} is not certified or does not belong to your cooperative`, 400);
         }
 
+        if (![EUDR_STATUS.APPROVED, EUDR_STATUS.SUBMITTED].includes(lot.eudrStatus)) {
+          throw new AppError('eudr_not_ready', 'Lot EUDR dossier not approved', 400, {
+            lotId: lot.id,
+            eudrStatus: lot.eudrStatus
+          });
+        }
+
         // Update weight if provided
-        if (lotInput.weightKg && lotInput.weightKg !== lot.weightKg) {
+        if (typeof lotInput.weightKg === 'number' && lotInput.weightKg !== lot.weightKg) {
           await tx.lot.update({
             where: { id: lot.id },
             data: { weightKg: lotInput.weightKg }
