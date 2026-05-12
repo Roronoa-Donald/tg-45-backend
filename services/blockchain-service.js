@@ -28,7 +28,13 @@ async function anchorProof(blockchain, payload) {
     // In case of any broadcasting error, return proofHash but no txHash
     // so the rest of the app can proceed while we surface the error in logs.
     // eslint-disable-next-line no-console
-    console.error('anchorProof broadcast failed:', err && err.message ? err.message : err);
+    console.error('anchorProof broadcast failed:', {
+      message: err && err.message ? err.message : err,
+      code: err && err.code ? err.code : undefined,
+      reason: err && err.reason ? err.reason : undefined,
+      rpcCode: err && err.code ? err.code : undefined,
+      rpcData: err && err.data ? err.data : undefined
+    });
     return { proofHash, txHash: null };
   }
 }
