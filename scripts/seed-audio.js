@@ -2,18 +2,20 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 const PHRASES = [
-  { key: 'welcome_msg', text: "Bienvenue ! Pour enregistrer un nouveau sac de cacao, appuie sur le très gros bouton JAUNE au milieu." },
-  { key: 'btn_history', text: "Pour voir le cacao que tu as déjà vendu, appuie sur le bouton BLEU avec la liste." },
-  { key: 'btn_drafts', text: "Attention, tu as des envois qui ne sont pas partis. Appuie sur le bouton GRIS en bas." },
-  { key: 'step_photo_intro', text: "Nous allons prendre la photo du cacao. Appuie sur le gros bouton ROUGE avec l'appareil photo." },
-  { key: 'error_photo_dark', text: "On ne voit pas bien, il fait trop sombre. Mets-toi au soleil et appuie encore sur le bouton ROUGE." },
-  { key: 'step_scale_intro', text: "C'est bon pour le cacao. Maintenant, prends une photo de la balance avec le poids du sac. Appuie encore sur le bouton ROUGE." },
-  { key: 'error_scale_dark', text: "On ne voit pas bien les chiffres de la balance. Rapproche-toi et appuie encore sur le bouton ROUGE." },
-  { key: 'step_gps_intro', text: "Les photos sont bonnes ! Le téléphone cherche ton champ. Reste debout, ne marche pas. Attends d'entendre la musique." },
-  { key: 'error_gps_weak', text: "Le téléphone ne te trouve pas. Déplace-toi là où il n'y a pas de grands arbres au-dessus de toi." },
-  { key: 'btn_submit', text: "Tout est prêt ! Appuie sur le grand bouton VERT en bas pour envoyer à la coopérative." },
-  { key: 'success_msg', text: "Bravo ! Le sac est bien enregistré, tu peux ranger le téléphone." },
-  { key: 'offline_msg', text: "Il n'y a pas de réseau ici. C'est gardé dans le téléphone. Quand tu rentreras au village, ça partira tout seul." }
+  { key: 'welcome_msg', text: "Bienvenue ! Pour enregistrer un nouveau sac, appuie sur le bouton NOUVEAU SAC." },
+  { key: 'btn_history', text: "Pour voir les lots déjà enregistrés, ouvre l'onglet Historique." },
+  { key: 'btn_drafts', text: "Les lots en attente sont marqués EN ATTENTE dans l'historique." },
+  { key: 'permission_camera', text: "Autorise la caméra pour pouvoir prendre les photos." },
+  { key: 'step_photo_intro', text: "Écran SAC. Appuie sur le bouton rond pour prendre la photo du sac." },
+  { key: 'error_photo_dark', text: "La photo est trop sombre. Mets-toi à la lumière et recommence." },
+  { key: 'step_scale_intro', text: "Écran BALANCE. Appuie sur le bouton rond pour prendre la photo de la balance." },
+  { key: 'error_scale_dark', text: "On ne voit pas bien les chiffres. Rapproche-toi et recommence." },
+  { key: 'step_gps_intro', text: "Le téléphone cherche ta position. Reste immobile quelques secondes." },
+  { key: 'error_gps_weak', text: "La position est faible. Va dans un endroit dégagé et attends." },
+  { key: 'select_parcel', text: "Si tu as des parcelles, choisis-les dans la liste." },
+  { key: 'btn_submit', text: "Tout est prêt. Appuie sur ENREGISTRER." },
+  { key: 'success_msg', text: "Bravo ! Le sac est enregistré." },
+  { key: 'offline_msg', text: "Sans réseau, c'est gardé et envoyé plus tard." }
 ];
 
 const LANGUAGES = [

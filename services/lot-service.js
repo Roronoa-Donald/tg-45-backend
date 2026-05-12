@@ -5,9 +5,114 @@ const lotRepository = require('../repositories/lot-repository');
 const blockchainService = require('./blockchain-service');
 const mediaService = require('./media-service');
 
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function normalizePolygonRing(geometry) {
+  if (!geometry || geometry.type !== 'Polygon') {
+    return null;
+  }
+  const coords = geometry.coordinates;
+  if (!Array.isArray(coords) || coords.length === 0) {
+    return null;
+  }
+
+  const first = coords[0];
+  const ring = Array.isArray(first) && typeof first[0] === 'number' ? coords : first;
+  if (!Array.isArray(ring) || ring.length < 3) {
+    return null;
+  }
+
+  return ring;
+}
+
+function pointInPolygon(lng, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersect = ((yi > lat) !== (yj > lat)) &&
+      (lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi);
+    if (intersect) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function isGpsInsideParcel(parcel, lat, lng, precisionM) {
+  let geometry = parcel.geometry;
+  if (typeof geometry === 'string') {
+    try {
+      geometry = JSON.parse(geometry);
+    } catch {
+      return false;
+    }
+  }
+
+  if (parcel.geometryType === 'polygon') {
+    const ring = normalizePolygonRing(geometry);
+    if (!ring) {
+      return false;
+    }
+    return pointInPolygon(lng, lat, ring);
+  }
+
+  if (parcel.geometryType === 'point') {
+    if (!geometry || geometry.type !== 'Point' || !Array.isArray(geometry.coordinates)) {
+      return false;
+    }
+    const [pLng, pLat] = geometry.coordinates;
+    if (typeof pLng !== 'number' || typeof pLat !== 'number') {
+      return false;
+    }
+    const distanceM = getDistanceKm(lat, lng, pLat, pLng) * 1000;
+    const toleranceM = Math.max(100, precisionM || 0);
+    return distanceM <= toleranceM;
+  }
+
+  return false;
+}
+
 async function registerLot(prisma, payload, actorId, blockchain, requestId) {
   if (payload.gpsPrecisionM > 100) {
     throw new AppError('gps_precision', 'GPS precision above 100m', 400);
+  }
+
+  const parcelIds = Array.isArray(payload.parcelIds)
+    ? Array.from(new Set(payload.parcelIds))
+    : [];
+
+  if (parcelIds.length > 0) {
+    const parcels = await prisma.parcel.findMany({
+      where: { id: { in: parcelIds } }
+    });
+
+    if (parcels.length !== parcelIds.length) {
+      throw new AppError('parcel_not_found', 'Parcel not found', 404);
+    }
+
+    const unauthorized = parcels.find((parcel) => parcel.ownerId !== actorId);
+    if (unauthorized) {
+      throw new AppError('forbidden', 'Parcel does not belong to farmer', 403);
+    }
+
+    const insideAny = parcels.some((parcel) =>
+      isGpsInsideParcel(parcel, payload.gpsOriginLat, payload.gpsOriginLng, payload.gpsPrecisionM)
+    );
+    if (!insideAny) {
+      throw new AppError('gps_outside_parcel', 'GPS must be inside selected parcel', 400);
+    }
   }
 
   let lotCode = null;
@@ -47,6 +152,16 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
             requestId
           }
         });
+
+        if (parcelIds.length > 0) {
+          await tx.lotParcel.createMany({
+            data: parcelIds.map((parcelId) => ({
+              lotId: created.id,
+              parcelId
+            })),
+            skipDuplicates: true
+          });
+        }
 
         return created;
       });

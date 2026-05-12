@@ -13,6 +13,7 @@ const lotRegisterSchema = z.object({
   gpsOriginLat: z.number(),
   gpsOriginLng: z.number(),
   gpsPrecisionM: z.number().int().positive(),
+  parcelIds: z.array(z.string().uuid()).min(1).optional(),
   cooperativeId: z.string().uuid().optional(),
   title: z.string().optional(),
   draftId: z.string().optional(),
