@@ -1,7 +1,8 @@
 const { ethers } = require('ethers');
+const fp = require('fastify-plugin');
 const env = require('../config/env');
 
-module.exports = async function blockchainPlugin(app) {
+module.exports = fp(async function blockchainPlugin(app) {
   const enabled = Boolean(env.polygon.rpcUrl && env.polygon.walletPrivateKey);
   let provider = null;
   let wallet = null;
@@ -27,4 +28,4 @@ module.exports = async function blockchainPlugin(app) {
     wallet,
     confirmations: env.polygon.confirmations
   });
-};
+});
