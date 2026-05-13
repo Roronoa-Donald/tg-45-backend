@@ -2,6 +2,8 @@ const { authenticate, requireRole } = require('../../utils/auth-hooks');
 const { successEnvelope } = require('../../utils/response');
 const { USER_ROLES } = require('../../config/constants');
 const { AppError } = require('../../utils/errors');
+const { parseOrThrow } = require('../../utils/schema');
+const { z } = require('zod');
 const auditService = require('../../services/audit-service');
 
 module.exports = async function cooperativeFarmersRoutes(app) {
@@ -88,8 +90,19 @@ module.exports = async function cooperativeFarmersRoutes(app) {
   app.post('/:id/join-request', {
     preHandler: [authenticate, requireRole([USER_ROLES.FARMER])]
   }, async (request) => {
-    const { id } = request.params;
+    const params = parseOrThrow(z.object({ id: z.string().uuid() }), request.params);
+    const { id } = params;
     const farmerId = request.user.sub;
+
+    if (!farmerId || !z.string().uuid().safeParse(farmerId).success) {
+      throw new AppError('invalid_user', 'Utilisateur invalide', 400);
+    }
+
+    if (request.user.cooperativeId && request.user.cooperativeId !== id) {
+      throw new AppError('already_in_cooperative', 'Vous appartenez deja a une cooperative', 400, {
+        cooperativeId: request.user.cooperativeId
+      });
+    }
 
     const coop = await app.prisma.cooperative.findUnique({ where: { id } });
     if (!coop) throw new AppError('not_found', 'Cooperative not found', 404);
@@ -102,13 +115,24 @@ module.exports = async function cooperativeFarmersRoutes(app) {
       throw new AppError('already_exists', 'Join request already sent or active', 400);
     }
 
-    const membership = await app.prisma.cooperativeMember.create({
-      data: {
-        cooperativeId: id,
-        userId: farmerId,
-        role: 'pending'
+    let membership;
+    try {
+      membership = await app.prisma.cooperativeMember.create({
+        data: {
+          cooperativeId: id,
+          userId: farmerId,
+          role: 'pending'
+        }
+      });
+    } catch (err) {
+      if (err && err.code === 'P2002') {
+        throw new AppError('already_exists', 'Join request already sent or active', 400);
       }
-    });
+      if (err && err.code === 'P2003') {
+        throw new AppError('invalid_reference', 'Cooperative ou utilisateur invalide', 400);
+      }
+      throw err;
+    }
 
     await auditService.log(app.prisma, {
       actorId: farmerId,
