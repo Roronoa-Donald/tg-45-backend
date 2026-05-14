@@ -43,7 +43,11 @@ async function listLots(prisma, where, skip, take) {
     include: {
       // CO-003: Include cooperativeId for proper filtering on mobile
       owner: { select: { id: true, name: true, phone: true, cooperativeId: true } },
-      cooperative: { select: { id: true, name: true } }
+      cooperative: { select: { id: true, name: true } },
+      // Include images for displaying in lot cards
+      images: { select: { id: true, url: true, isPrimary: true } },
+      // Include parcels for lot detail view
+      parcels: { include: { parcel: { select: { id: true, name: true, areaHa: true, geometryType: true } } } }
     }
   });
 }
