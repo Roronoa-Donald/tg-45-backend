@@ -23,6 +23,7 @@ const batchVerifySchema = z.object({
 
 const querySchema = z.object({
   status: z.string().optional(),
+  lotCode: z.string().optional(), // VE-006: Support recherche par lotCode
   page: z.string().optional(),
   pageSize: z.string().optional()
 });

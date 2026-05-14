@@ -6,6 +6,7 @@ const geometrySchema = z.object({
 });
 
 const baseParcelSchema = z.object({
+  ownerId: z.string().uuid().optional(),
   name: z.string().min(2).optional(),
   cooperativeId: z.string().uuid().optional(),
   countryCode: z.string().min(2).max(3).optional(),

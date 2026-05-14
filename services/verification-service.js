@@ -21,10 +21,17 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-async function assignStatus(prisma, lotId, status, actorId, reason, gps) {
+async function assignStatus(prisma, lotId, status, actorId, reason, gps, userCooperativeId) {
   const lot = await lotRepository.findLotById(prisma, lotId);
   if (!lot) {
     throw new AppError('not_found', 'Lot not found', 404);
+  }
+
+  // CO-004: Verify lot belongs to the cooperative when validating
+  if (status === LOT_STATUS.VALIDATED || status === LOT_STATUS.REJECTED) {
+    if (userCooperativeId && lot.cooperativeId && lot.cooperativeId !== userCooperativeId) {
+      throw new AppError('forbidden', 'Ce lot n\'appartient pas à votre coopérative', 403);
+    }
   }
 
   // Check distance if validating
@@ -128,10 +135,29 @@ async function batchVerify(prisma, lotIds, status, actorId) {
   return results;
 }
 
+// VE-012: Filtrer les lots pour le verificateur
+// Par defaut, ne montrer que les lots 'validated' prets a etre certifies
+// ou les lots deja traites par le verificateur (certified, rejected)
 async function queryLots(prisma, query, pagination) {
   const where = {};
+
   if (query.status) {
+    // Si un statut specifique est demande, l'utiliser
     where.status = query.status;
+  } else {
+    // Par defaut, montrer uniquement les lots pertinents pour le verificateur
+    // (validated pour certification, ou certified/rejected pour historique)
+    where.status = {
+      in: [LOT_STATUS.VALIDATED, LOT_STATUS.CERTIFIED, LOT_STATUS.REJECTED]
+    };
+  }
+
+  // VE-006: Support de la recherche par lotCode
+  if (query.lotCode) {
+    where.lotCode = {
+      contains: query.lotCode,
+      mode: 'insensitive'
+    };
   }
 
   const [total, items] = await Promise.all([
@@ -140,7 +166,12 @@ async function queryLots(prisma, query, pagination) {
       where,
       skip: pagination.skip,
       take: pagination.pageSize,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      include: {
+        owner: {
+          select: { id: true, name: true }
+        }
+      }
     })
   ]);
 

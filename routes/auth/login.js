@@ -16,6 +16,14 @@ module.exports = async function loginRoute(app) {
       cooperativeId: user.cooperativeId
     }, { expiresIn: env.jwtExpiresIn });
 
-    return successEnvelope({ token, role: user.role });
+    return successEnvelope({
+      token,
+      role: user.role,
+      id: user.id,
+      phone: user.phone,
+      email: user.email,
+      name: user.name,
+      cooperativeId: user.cooperativeId
+    });
   });
 };

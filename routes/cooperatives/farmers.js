@@ -63,6 +63,7 @@ module.exports = async function cooperativeFarmersRoutes(app) {
     }
 
     // Update membership role and also link user's cooperativeId
+    // CO-009: Also link farmer's existing orphan lots to the cooperative
     await app.prisma.$transaction([
       app.prisma.cooperativeMember.update({
         where: { id: membership.id },
@@ -70,6 +71,10 @@ module.exports = async function cooperativeFarmersRoutes(app) {
       }),
       app.prisma.user.update({
         where: { id: farmerId },
+        data: { cooperativeId: id }
+      }),
+      app.prisma.lot.updateMany({
+        where: { ownerId: farmerId, cooperativeId: null },
         data: { cooperativeId: id }
       })
     ]);

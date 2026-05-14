@@ -27,7 +27,8 @@ const VERIFICATION_STATUS = {
 const EXPORT_STATUS = {
   DECLARED: 'declared',
   IN_TRANSIT: 'in_transit',
-  DELIVERED: 'delivered'
+  DELIVERED: 'delivered',
+  REJECTED: 'rejected'
 };
 
 const EUDR_STATUS = {

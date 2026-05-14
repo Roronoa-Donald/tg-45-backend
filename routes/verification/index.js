@@ -12,13 +12,15 @@ module.exports = async function verificationRoutes(app) {
     preHandler: [authenticate, requireRole([USER_ROLES.VERIFIER, USER_ROLES.COOPERATIVE])],
   }, async (request) => {
     const payload = parseOrThrow(statusUpdateSchema, request.body);
+    // CO-004: Pass cooperativeId to verify lot ownership
     const lot = await verificationService.assignStatus(
       app.prisma,
       request.params.id,
       payload.status,
       request.user.sub,
       payload.reason,
-      payload.gps
+      payload.gps,
+      request.user.cooperativeId
     );
 
     await auditService.log(app.prisma, {

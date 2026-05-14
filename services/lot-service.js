@@ -89,6 +89,16 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
     throw new AppError('gps_precision', 'GPS precision above 100m', 400);
   }
 
+  // Auto-assign cooperativeId from farmer's profile if not provided
+  let cooperativeId = payload.cooperativeId || null;
+  if (!cooperativeId) {
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { cooperativeId: true }
+    });
+    cooperativeId = actor?.cooperativeId || null;
+  }
+
   const parcelIds = Array.isArray(payload.parcelIds)
     ? Array.from(new Set(payload.parcelIds))
     : [];
@@ -125,7 +135,7 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
         const created = await lotRepository.createLot(tx, {
           lotCode,
           ownerId: actorId,
-          cooperativeId: payload.cooperativeId || null,
+          cooperativeId,
           product: payload.product,
           variety: payload.variety,
           hsCode: payload.hsCode || null,
@@ -214,13 +224,32 @@ async function getLotByCode(prisma, code) {
 
 async function listLots(prisma, query, pagination) {
   const where = {};
-  
+
   if (query.status) {
     where.status = query.status;
   }
-  
+
   if (query.ownerId) {
     where.ownerId = query.ownerId;
+  }
+
+  // CO-001: Support filtering by cooperativeId
+  // A lot belongs to a cooperative if:
+  // 1. lot.cooperativeId matches directly, OR
+  // 2. lot.owner.cooperativeId matches (farmer belongs to the cooperative)
+  if (query.cooperativeId) {
+    where.OR = [
+      { cooperativeId: query.cooperativeId },
+      { owner: { cooperativeId: query.cooperativeId } }
+    ];
+  }
+
+  // VE-006: Support recherche par lotCode
+  if (query.lotCode) {
+    where.lotCode = {
+      contains: query.lotCode,
+      mode: 'insensitive'
+    };
   }
 
   const [total, items] = await Promise.all([

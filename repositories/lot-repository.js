@@ -41,8 +41,9 @@ async function listLots(prisma, where, skip, take) {
     take,
     orderBy: { createdAt: 'desc' },
     include: {
-      owner: { select: { name: true } },
-      cooperative: { select: { name: true } }
+      // CO-003: Include cooperativeId for proper filtering on mobile
+      owner: { select: { id: true, name: true, phone: true, cooperativeId: true } },
+      cooperative: { select: { id: true, name: true } }
     }
   });
 }

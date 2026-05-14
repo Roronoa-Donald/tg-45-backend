@@ -23,6 +23,8 @@ const lotRegisterSchema = z.object({
 
 const lotQuerySchema = z.object({
   status: z.string().optional(),
+  lotCode: z.string().optional(), // VE-006: Support recherche par lotCode
+  cooperativeId: z.string().uuid().optional(),
   page: z.string().optional(),
   pageSize: z.string().optional()
 });

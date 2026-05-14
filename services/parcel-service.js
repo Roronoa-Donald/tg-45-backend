@@ -5,9 +5,11 @@ async function createParcel(prisma, payload, actorId) {
     throw new AppError('invalid_geometry', 'Polygon required for parcels above 4ha', 400);
   }
 
+  const ownerId = payload.ownerId || actorId;
+
   return prisma.parcel.create({
     data: {
-      ownerId: actorId,
+      ownerId,
       cooperativeId: payload.cooperativeId || null,
       name: payload.name || null,
       countryCode: payload.countryCode || null,
@@ -60,7 +62,10 @@ async function listParcels(prisma, where, pagination) {
       where,
       orderBy: { createdAt: 'desc' },
       skip: pagination.skip,
-      take: pagination.pageSize
+      take: pagination.pageSize,
+      include: {
+        owner: { select: { id: true, name: true, phone: true, email: true } }
+      }
     })
   ]);
   return { total, items };

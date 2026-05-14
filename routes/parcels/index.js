@@ -26,7 +26,47 @@ module.exports = async function parcelRoutes(app) {
     preHandler: [authenticate, requireRole([USER_ROLES.FARMER, USER_ROLES.COOPERATIVE, USER_ROLES.ADMIN, USER_ROLES.COMPLIANCE])]
   }, async (request) => {
     const payload = parseOrThrow(parcelCreateSchema, request.body);
-    const parcel = await parcelService.createParcel(app.prisma, payload, request.user.sub);
+    let ownerId = request.user.sub;
+    let cooperativeId = payload.cooperativeId || null;
+
+    if (request.user.role === USER_ROLES.COOPERATIVE) {
+      if (!request.user.cooperativeId) {
+        throw new AppError('missing_cooperative', 'Cooperative missing', 400);
+      }
+      if (!payload.ownerId) {
+        throw new AppError('owner_required', 'ownerId required for cooperative parcels', 400);
+      }
+
+      const membership = await app.prisma.cooperativeMember.findFirst({
+        where: {
+          cooperativeId: request.user.cooperativeId,
+          userId: payload.ownerId,
+          role: 'active'
+        },
+        include: {
+          user: { select: { role: true } }
+        }
+      });
+
+      if (!membership || membership.user.role !== USER_ROLES.FARMER) {
+        throw new AppError('forbidden', 'Farmer not in cooperative', 403);
+      }
+
+      ownerId = payload.ownerId;
+      cooperativeId = request.user.cooperativeId;
+    } else if (payload.ownerId) {
+      if ([USER_ROLES.ADMIN, USER_ROLES.COMPLIANCE].includes(request.user.role)) {
+        ownerId = payload.ownerId;
+      } else if (payload.ownerId !== request.user.sub) {
+        throw new AppError('forbidden', 'Forbidden', 403);
+      }
+    }
+
+    const parcel = await parcelService.createParcel(
+      app.prisma,
+      { ...payload, ownerId, cooperativeId },
+      request.user.sub
+    );
 
     await auditService.log(app.prisma, {
       actorId: request.user.sub,
