@@ -58,12 +58,12 @@ module.exports = async function ministryRoutes(app) {
   }, async (request) => {
     const pendingUsers = await app.prisma.user.findMany({
       where: {
-        role: { in: [USER_ROLES.COOPERATIVE, USER_ROLES.VERIFIER, USER_ROLES.EXPORTER] },
-        status: 'pending'
+        role: { in: [USER_ROLES.COOPERATIVE, USER_ROLES.VERIFIER, USER_ROLES.EXPORTER, USER_ROLES.COMPLIANCE] },
+        status: 'pending_approval'
       },
       orderBy: { createdAt: 'desc' }
     });
-    return successEnvelope(pendingUsers);
+    return successEnvelope({ users: pendingUsers, total: pendingUsers.length });
   });
 
   // 3. Approve a user
@@ -71,13 +71,17 @@ module.exports = async function ministryRoutes(app) {
     preHandler: [authenticate, requireRole([USER_ROLES.MINISTRY])]
   }, async (request) => {
     const { id } = request.params;
-    
+
     const user = await app.prisma.user.findUnique({ where: { id } });
-    if (!user) throw new AppError('not_found', 'User not found', 404);
+    if (!user) throw new AppError('not_found', 'Utilisateur non trouvé', 404);
+
+    if (user.status !== 'pending_approval') {
+      throw new AppError('invalid_state', 'Cet utilisateur n\'est pas en attente d\'approbation', 400);
+    }
 
     const updated = await app.prisma.user.update({
       where: { id },
-      data: { status: 'active' }
+      data: { status: 'active', loginAttempts: 0, approvalReason: null }
     });
 
     await auditService.log(app.prisma, {
@@ -85,7 +89,8 @@ module.exports = async function ministryRoutes(app) {
       action: 'approve_actor',
       targetType: 'user',
       targetId: id,
-      requestId: request.id
+      requestId: request.id,
+      details: { role: user.role, email: user.email }
     });
 
     return successEnvelope(updated);
@@ -97,13 +102,21 @@ module.exports = async function ministryRoutes(app) {
   }, async (request) => {
     const { id } = request.params;
     const { reason } = request.body || {};
-    
+
     const user = await app.prisma.user.findUnique({ where: { id } });
-    if (!user) throw new AppError('not_found', 'User not found', 404);
+    if (!user) throw new AppError('not_found', 'Utilisateur non trouvé', 404);
+
+    if (user.status !== 'pending_approval') {
+      throw new AppError('invalid_state', 'Cet utilisateur n\'est pas en attente d\'approbation', 400);
+    }
 
     const updated = await app.prisma.user.update({
       where: { id },
-      data: { status: 'rejected' }
+      data: {
+        status: 'rejected',
+        approvalReason: reason || 'Inscription refusée par le ministère',
+        loginAttempts: 0
+      }
     });
 
     await auditService.log(app.prisma, {
@@ -112,7 +125,7 @@ module.exports = async function ministryRoutes(app) {
       targetType: 'user',
       targetId: id,
       requestId: request.id,
-      details: { reason: reason || 'Refusé par le ministère' }
+      details: { reason: reason || 'Refusé par le ministère', role: user.role, email: user.email }
     });
 
     return successEnvelope(updated);

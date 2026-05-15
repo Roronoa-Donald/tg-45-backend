@@ -19,7 +19,8 @@ const registerSchema = z.object({
   phone: z.string().min(6).optional(),
   email: z.string().email().optional(),
   secret: z.string().min(4),
-  role: z.string().optional(),
+  role: z.enum(['farmer', 'cooperative', 'verifier', 'exporter', 'compliance']).optional(),
+  cooperativeId: z.string().uuid().optional(),
   farmName: z.string().optional(),
   location: z.string().optional(),
   language: z.string().optional()

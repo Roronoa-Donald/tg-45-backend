@@ -15,7 +15,9 @@ model User {
   email                  String?             @unique
   passwordHash           String?             @map("password_hash")
   pinHash                String?             @map("pin_hash")
-  status                 String              @default("pending")
+  status                 String              @default("pending") // pending, pending_approval, active, rejected, disabled
+  approvalReason         String?             @map("approval_reason") @db.Text
+  loginAttempts          Int                 @default(0) @map("login_attempts")
   cooperativeId          String?             @map("cooperative_id") @db.Uuid
   farmerQrToken          String?             @unique @map("farmer_qr_token") @db.VarChar(100)
   createdAt              DateTime            @default(now()) @map("created_at")

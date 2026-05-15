@@ -6,29 +6,59 @@ const userRepository = require('../repositories/user-repository');
 async function login(prisma, identifier, secret) {
   const user = await userRepository.findByIdentifier(prisma, identifier);
   if (!user) {
-    throw new AppError('invalid_credentials', 'Invalid credentials', 401);
+    throw new AppError('invalid_credentials', 'Identifiants invalides', 401);
   }
 
-  if (user.status === 'pending') {
-    throw new AppError('pending_approval', "Votre compte est en attente d'approbation, veuillez patienter.", 403);
+  // Check if user is in pending_approval state
+  if (user.status === 'pending_approval') {
+    // Return special response for modal display
+    throw new AppError('pending_approval', 'pending_approval', 403, {
+      status: 'pending_approval',
+      message: "Votre compte est en attente d'approbation par le ministère.",
+      reason: user.approvalReason || null
+    });
   }
 
   if (user.status === 'rejected') {
-    throw new AppError('account_rejected', "Votre inscription a été refusée par le ministère. Veuillez contacter l'administration.", 403);
+    throw new AppError('account_rejected', 'account_rejected', 403, {
+      status: 'rejected',
+      message: "Votre inscription a été refusée par le ministère.",
+      reason: user.approvalReason || null
+    });
   }
 
   if (user.status !== 'active') {
-    throw new AppError('account_disabled', 'Account disabled', 403);
+    throw new AppError('account_disabled', 'Compte désactivé', 403);
   }
 
   const hash = user.pinHash || user.passwordHash;
   if (!hash) {
-    throw new AppError('invalid_credentials', 'Invalid credentials', 401);
+    throw new AppError('invalid_credentials', 'Identifiants invalides', 401);
   }
 
   const match = await bcrypt.compare(secret, hash);
   if (!match) {
-    throw new AppError('invalid_credentials', 'Invalid credentials', 401);
+    // Increment login attempts
+    const newAttempts = (user.loginAttempts || 0) + 1;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { loginAttempts: newAttempts }
+    });
+
+    // Check if max attempts reached
+    if (newAttempts >= 3) {
+      throw new AppError('max_attempts', 'Trop de tentatives échouées. Compte verrouillé temporairement.', 429);
+    }
+
+    throw new AppError('invalid_credentials', `Identifiants invalides (${newAttempts}/3)`, 401);
+  }
+
+  // Reset login attempts on successful auth
+  if (user.loginAttempts > 0) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { loginAttempts: 0 }
+    });
   }
 
   return user;

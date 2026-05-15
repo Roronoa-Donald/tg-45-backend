@@ -54,6 +54,31 @@ module.exports = async function eudrRoutes(app) {
     return successEnvelope(updated);
   });
 
+  app.get('/ddr', {
+    preHandler: [authenticate]
+  }, async (request) => {
+    const filters = {};
+
+    if (request.query.cooperativeId) {
+      filters.cooperativeId = request.query.cooperativeId;
+    }
+    if (request.query.status) {
+      filters.status = request.query.status;
+    }
+
+    const ddrs = await app.prisma.eudrDueDiligence.findMany({
+      where: filters,
+      include: {
+        lot: { select: { id: true, lotCode: true } },
+        documents: true,
+        declarations: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return successEnvelope({ items: ddrs });
+  });
+
   app.get('/ddr/:id', {
     preHandler: [authenticate]
   }, async (request) => {
