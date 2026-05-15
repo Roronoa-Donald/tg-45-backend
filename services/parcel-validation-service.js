@@ -3,6 +3,16 @@ const exifService = require('./exif-service');
 
 const VALIDATION_DURATION_DAYS = 30;
 
+function getDistanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 function isPointInsidePolygon(point, polygon) {
   const { lat, lng } = point;
   const coords = polygon.coordinates[0];
@@ -72,6 +82,9 @@ async function assignVerifierToParcel(prisma, parcelId) {
 }
 
 async function getPendingParcels(prisma, verifierId, pagination = { skip: 0, pageSize: 20 }) {
+  console.log('[getPendingParcels] Called with verifierId:', verifierId);
+  console.log('[getPendingParcels] Pagination:', pagination);
+
   const where = {
     verifierId,
     status: 'pending'
@@ -96,6 +109,7 @@ async function getPendingParcels(prisma, verifierId, pagination = { skip: 0, pag
     })
   ]);
 
+  console.log('[getPendingParcels] Found total:', total, 'items:', items.length);
   return { total, items };
 }
 
@@ -128,18 +142,19 @@ async function addValidationPhoto(prisma, validationId, verifierId, photoData) {
   const gpsLng = exifData?.gps?.lng || photoData.gpsLng;
   const takenAt = exifData?.dateTaken || photoData.takenAt;
 
-  // Valider GPS dans polygone
-  let isInsideParcel = false;
+  // Valider GPS dans polygone (informatif, non bloquant)
+  let isInsideParcel = true;
   let gpsValid = true;
   let gpsValidationReason = null;
 
-  if (validation.parcel.geometryType?.toLowerCase() === 'polygon' && gpsLat && gpsLng) {
+  const geometryType = (validation.parcel.geometryType || '').toLowerCase();
+
+  if (geometryType === 'polygon' && gpsLat && gpsLng && validation.parcel.geometry) {
     isInsideParcel = isPointInsidePolygon(
       { lat: gpsLat, lng: gpsLng },
       validation.parcel.geometry
     );
 
-    // Valider GPS avec EXIF si données disponibles
     if (exifData?.gps) {
       const gpsValidation = exifService.validateGpsInPolygon(
         exifData.gps,
@@ -147,6 +162,17 @@ async function addValidationPhoto(prisma, validationId, verifierId, photoData) {
       );
       gpsValid = gpsValidation.valid;
       gpsValidationReason = gpsValidation.reason || null;
+    }
+  } else if (geometryType === 'point' && gpsLat && gpsLng && validation.parcel.geometry) {
+    // Pour les points, vérifier la proximité (500m de tolérance)
+    const coords = validation.parcel.geometry.coordinates;
+    if (coords && coords.length >= 2) {
+      const [pLng, pLat] = coords;
+      const distance = getDistanceMeters(gpsLat, gpsLng, pLat, pLng);
+      isInsideParcel = distance <= 500;
+      if (!isInsideParcel) {
+        gpsValidationReason = `Distance: ${Math.round(distance)}m (tolerance: 500m)`;
+      }
     }
   }
 
@@ -198,12 +224,7 @@ async function validateParcel(prisma, validationId, verifierId, approve, reason)
 
   if (approve) {
     if (validation.photos.length < 3) {
-      throw new AppError('insufficient_photos', 'At least 3 photos required for validation', 400);
-    }
-
-    const photosInside = validation.photos.filter(p => p.isInsideParcel);
-    if (photosInside.length < 3 && validation.parcel.geometryType?.toLowerCase() === 'polygon') {
-      throw new AppError('photos_outside', 'At least 3 photos must be taken inside the parcel', 400);
+      throw new AppError('insufficient_photos', 'Au moins 3 photos sont requises pour la validation', 400);
     }
   }
 
