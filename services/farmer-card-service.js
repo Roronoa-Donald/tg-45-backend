@@ -1,6 +1,6 @@
 const QRCode = require('qrcode');
 const crypto = require('crypto');
-const { AppError } = require('../utils/app-error');
+const { AppError } = require('../utils/errors');
 
 /**
  * Génère un token unique pour un agriculteur
