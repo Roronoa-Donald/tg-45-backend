@@ -125,7 +125,7 @@ async function getPendingLots(prisma, verifierId, pagination = { skip: 0, pageSi
     verifications: {
       some: {
         verifierId,
-        vote: null
+        vote: { equals: null }
       }
     }
   };
@@ -196,7 +196,7 @@ async function getSpotCheckLots(prisma, verifierId, pagination = { skip: 0, page
     verifications: {
       some: {
         verifierId,
-        vote: null
+        vote: { equals: null }
       }
     }
   };
