@@ -24,7 +24,7 @@ async function getRandomVerifier(prisma, excludeIds = []) {
   const verifiers = await prisma.user.findMany({
     where: {
       role: 'verifier',
-      status: 'approved',
+      status: { in: ['approved', 'active'] }, // Accept both approved and active verifiers
       id: { notIn: excludeIds }
     },
     select: { id: true }
