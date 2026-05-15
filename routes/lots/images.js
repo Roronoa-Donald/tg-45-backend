@@ -6,7 +6,7 @@ const exifService = require('../../services/exif-service');
 
 module.exports = async function lotImageRoutes(app) {
   app.post('/:id/images', {
-    preHandler: [authenticate, requireRole([USER_ROLES.FARMER])]
+    preHandler: [authenticate, requireRole([USER_ROLES.FARMER, USER_ROLES.COOPERATIVE])]
   }, async (request) => {
     const file = await request.file();
     if (!file) {
