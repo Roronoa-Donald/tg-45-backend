@@ -467,7 +467,7 @@ model LotVerification {
   id            String   @id @default(uuid()) @db.Uuid
   lotId         String   @map("lot_id") @db.Uuid
   verifierId    String   @map("verifier_id") @db.Uuid
-  vote          String   @db.VarChar(16) // approve, reject
+  vote          String?  @db.VarChar(16) // approve, reject, null means not voted yet
   reason        String?
   createdAt     DateTime @default(now()) @map("created_at")
   lot           Lot      @relation(fields: [lotId], references: [id])
