@@ -1,10 +1,10 @@
-const { requireRole, USER_ROLES } = require('../auth/roles');
+const { authenticate, requireRole } = require('../../utils/auth-hooks');
+const { USER_ROLES } = require('../../config/constants');
 const farmerCardService = require('../../services/farmer-card-service');
-const { AppError } = require('../../utils/app-error');
-const { successEnvelope } = require('../../utils/response-helpers');
+const { AppError } = require('../../utils/errors');
+const { successEnvelope } = require('../../utils/response');
 
 async function routes(app) {
-  const { authenticate } = app;
 
   // Générer une carte QR pour soi-même (farmer)
   app.post('/generate', {
