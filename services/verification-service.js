@@ -1,6 +1,7 @@
 const { AppError } = require('../utils/errors');
 const { LOT_EVENT_TYPES, LOT_STATUS } = require('../config/constants');
 const lotRepository = require('../repositories/lot-repository');
+const reputationService = require('./reputation-service');
 
 const STATUS_TRANSITIONS = {
   [LOT_STATUS.REGISTERED]: [LOT_STATUS.VALIDATED, LOT_STATUS.REJECTED],
@@ -36,7 +37,12 @@ async function assignStatus(prisma, lotId, status, actorId, reason, gps, userCoo
 
   // Check distance if validating
   if (status === LOT_STATUS.VALIDATED && gps && gps.lat && gps.lng && lot.gpsOriginLat && lot.gpsOriginLng) {
-    const distance = getDistanceKm(lot.gpsOriginLat, lot.gpsOriginLng, gps.lat, gps.lng);
+    const distance = getDistanceKm(
+      Number(lot.gpsOriginLat),
+      Number(lot.gpsOriginLng),
+      gps.lat,
+      gps.lng
+    );
     if (distance > 50) {
       throw new AppError('gps_too_far', `La coopérative est trop éloignée du lieu de récolte (${Math.round(distance)}km > 50km)`, 403);
     }
@@ -116,6 +122,15 @@ async function certify(prisma, lotId, actorId, signature, gps) {
       }
     });
 
+    // Enregistrer l'événement de réputation pour le propriétaire du lot
+    await reputationService.recordEvent(
+      tx,
+      lot.ownerId,
+      reputationService.EVENT_TYPES.LOT_CERTIFIED,
+      lot.id,
+      'Lot certifié par vérificateur'
+    );
+
     return record;
   });
 
@@ -170,6 +185,16 @@ async function queryLots(prisma, query, pagination) {
       include: {
         owner: {
           select: { id: true, name: true }
+        },
+        images: {
+          select: { id: true, url: true, isPrimary: true }
+        },
+        parcels: {
+          include: {
+            parcel: {
+              select: { id: true, name: true, areaHa: true, geometryType: true, geometry: true }
+            }
+          }
         }
       }
     })

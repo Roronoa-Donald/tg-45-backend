@@ -17,6 +17,7 @@ model User {
   pinHash                String?             @map("pin_hash")
   status                 String              @default("pending")
   cooperativeId          String?             @map("cooperative_id") @db.Uuid
+  farmerQrToken          String?             @unique @map("farmer_qr_token") @db.VarChar(100)
   createdAt              DateTime            @default(now()) @map("created_at")
   updatedAt              DateTime            @updatedAt @map("updated_at")
   auditLogs              AuditLog[]          @relation("audit_actor")
@@ -30,6 +31,13 @@ model User {
   eudrDiligenceCreated    EudrDueDiligence[]  @relation("eudr_creator")
   eudrDiligenceApproved   EudrDueDiligence[]  @relation("eudr_approver")
   eudrDeclarations        EudrDeclaration[]   @relation("eudr_submitter")
+  parcelValidations      ParcelValidation[]  @relation("parcel_verifier")
+  lotVerifications       LotVerification[]   @relation("lot_verifier")
+  disputesReported       DisputeCase[]       @relation("dispute_reporter")
+  disputesReceived       DisputeCase[]       @relation("dispute_accused")
+  disputesResolved       DisputeCase[]       @relation("dispute_resolver")
+  reputationScore        ReputationScore?
+  reputationEvents       ReputationEvent[]
   cooperative            Cooperative?        @relation("CooperativeUsers", fields: [cooperativeId], references: [id])
 
   @@map("users")
@@ -98,7 +106,11 @@ model Lot {
   gpsOriginLng        Decimal           @map("gps_origin_lng") @db.Decimal(10, 6)
   gpsPrecisionM       Int               @map("gps_precision_m")
   gpsAreaRadiusM      Int               @default(100) @map("gps_area_radius_m")
-  status              String            @default("registered") // pending_transcription, registered
+  status              String            @default("registered") // pending_transcription, registered, validated, certified, rejected
+  verificationStatus  String            @default("pending_parcel") @map("verification_status") @db.VarChar(32) // pending_parcel, pending_vote, auto_validated, validated, rejected
+  autoValidated       Boolean           @default(false) @map("auto_validated")
+  spotCheck           Boolean           @default(false) @map("spot_check")
+  voteDeadline        DateTime?         @map("vote_deadline")
   eudrStatus          String            @default("not_started") @map("eudr_status") @db.VarChar(32)
   scaleImageUrl       String?           @map("scale_image_url")
   coopProofImageUrl   String?           @map("coop_proof_image_url")
@@ -111,12 +123,16 @@ model Lot {
   events              LotEvent[]
   images              LotImage[]
   parcels             LotParcel[]
+  verifications       LotVerification[]
+  disputes            DisputeCase[]
+  reputationEvents    ReputationEvent[]
   eudrDueDiligence     EudrDueDiligence?
   cooperative         Cooperative?      @relation(fields: [cooperativeId], references: [id])
   owner               User              @relation("lot_owner", fields: [ownerId], references: [id])
 
   @@map("lots")
   @@index([eudrStatus])
+  @@index([verificationStatus])
 }
 
 model LotEvent {
@@ -141,6 +157,10 @@ model LotImage {
   publicId  String?  @map("public_id")
   checksum  String?
   isPrimary Boolean  @default(false) @map("is_primary")
+  exifData  Json?    @map("exif_data")
+  gpsLat    Decimal? @map("gps_lat") @db.Decimal(10, 8)
+  gpsLng    Decimal? @map("gps_lng") @db.Decimal(11, 8)
+  takenAt   DateTime? @map("taken_at")
   createdAt DateTime @default(now()) @map("created_at")
   lot       Lot      @relation(fields: [lotId], references: [id])
 
@@ -246,27 +266,31 @@ model ExportEvent {
 }
 
 model Parcel {
-  id           String    @id @default(uuid()) @db.Uuid
-  ownerId      String    @map("owner_id") @db.Uuid
-  cooperativeId String?  @map("cooperative_id") @db.Uuid
-  name         String?   @db.VarChar(120)
-  countryCode  String?   @map("country_code") @db.VarChar(3)
-  region       String?   @db.VarChar(120)
-  district     String?   @db.VarChar(120)
-  locality     String?   @db.VarChar(120)
-  geometryType String    @map("geometry_type") @db.VarChar(16)
-  geometry     Json
-  areaHa       Decimal?  @map("area_ha") @db.Decimal(10, 2)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  lots         LotParcel[]
+  id               String    @id @default(uuid()) @db.Uuid
+  ownerId          String    @map("owner_id") @db.Uuid
+  cooperativeId    String?   @map("cooperative_id") @db.Uuid
+  name             String?   @db.VarChar(120)
+  countryCode      String?   @map("country_code") @db.VarChar(3)
+  region           String?   @db.VarChar(120)
+  district         String?   @db.VarChar(120)
+  locality         String?   @db.VarChar(120)
+  geometryType     String    @map("geometry_type") @db.VarChar(16)
+  geometry         Json
+  areaHa           Decimal?  @map("area_ha") @db.Decimal(10, 2)
+  validationStatus String    @default("pending") @map("validation_status") @db.VarChar(32) // pending, validated, rejected
+  validUntil       DateTime? @map("valid_until")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  lots             LotParcel[]
+  validations      ParcelValidation[]
   deforestationChecks EudrDeforestationCheck[]
-  owner        User      @relation(fields: [ownerId], references: [id])
-  cooperative  Cooperative? @relation(fields: [cooperativeId], references: [id])
+  owner            User      @relation(fields: [ownerId], references: [id])
+  cooperative      Cooperative? @relation(fields: [cooperativeId], references: [id])
 
   @@map("parcels")
   @@index([ownerId])
   @@index([cooperativeId])
+  @@index([validationStatus])
 }
 
 model LotParcel {
@@ -399,6 +423,63 @@ model WebhookSubscription {
 }
 
 // ==========================================
+// PARCEL & LOT VERIFICATION SYSTEM
+// ==========================================
+
+model ParcelValidation {
+  id            String                   @id @default(uuid()) @db.Uuid
+  parcelId      String                   @map("parcel_id") @db.Uuid
+  verifierId    String                   @map("verifier_id") @db.Uuid
+  status        String                   @default("pending") @db.VarChar(32) // pending, validated, rejected
+  validUntil    DateTime?                @map("valid_until")
+  reason        String?
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+  photos        ParcelValidationPhoto[]
+  parcel        Parcel                   @relation(fields: [parcelId], references: [id])
+  verifier      User                     @relation("parcel_verifier", fields: [verifierId], references: [id])
+
+  @@map("parcel_validations")
+  @@index([parcelId])
+  @@index([verifierId])
+  @@index([status])
+}
+
+model ParcelValidationPhoto {
+  id                    String           @id @default(uuid()) @db.Uuid
+  validationId          String           @map("validation_id") @db.Uuid
+  url                   String
+  gpsLat                Decimal          @map("gps_lat") @db.Decimal(10, 6)
+  gpsLng                Decimal          @map("gps_lng") @db.Decimal(10, 6)
+  takenAt               DateTime?        @map("taken_at")
+  isInsideParcel        Boolean          @default(false) @map("is_inside_parcel")
+  exifData              Json?            @map("exif_data")
+  gpsValid              Boolean          @default(true) @map("gps_valid")
+  gpsValidationReason   String?          @map("gps_validation_reason") @db.Text
+  createdAt             DateTime         @default(now()) @map("created_at")
+  validation            ParcelValidation @relation(fields: [validationId], references: [id])
+
+  @@map("parcel_validation_photos")
+  @@index([validationId])
+}
+
+model LotVerification {
+  id            String   @id @default(uuid()) @db.Uuid
+  lotId         String   @map("lot_id") @db.Uuid
+  verifierId    String   @map("verifier_id") @db.Uuid
+  vote          String   @db.VarChar(16) // approve, reject
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  lot           Lot      @relation(fields: [lotId], references: [id])
+  verifier      User     @relation("lot_verifier", fields: [verifierId], references: [id])
+
+  @@unique([lotId, verifierId])
+  @@map("lot_verifications")
+  @@index([lotId])
+  @@index([verifierId])
+}
+
+// ==========================================
 // AUDIO COLLECTOR MODULE (Isolated)
 // ==========================================
 
@@ -433,4 +514,64 @@ model AudioTranslation {
 
   @@unique([phraseKey, langCode])
   @@map("audio_translations")
+}
+
+// ==========================================
+// REPUTATION SYSTEM
+// ==========================================
+
+model ReputationScore {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  score        Int      @default(100)
+  lastUpdated  DateTime @default(now()) @map("last_updated")
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("reputation_scores")
+  @@index([score])
+}
+
+model ReputationEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  eventType   String   @map("event_type") @db.VarChar(32) // lot_certified, lot_rejected_by_exporter, dispute_proven
+  points      Int      // can be positive or negative
+  lotId       String?  @map("lot_id") @db.Uuid
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id])
+  lot         Lot?     @relation(fields: [lotId], references: [id])
+
+  @@map("reputation_events")
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// ==========================================
+// DISPUTE SYSTEM
+// ==========================================
+
+model DisputeCase {
+  id                String   @id @default(uuid()) @db.Uuid
+  lotId             String   @map("lot_id") @db.Uuid
+  reportedBy        String   @map("reported_by") @db.Uuid
+  reportedAgainst   String   @map("reported_against") @db.Uuid
+  reason            String   @db.Text
+  evidence          Json?    // URLs de photos/documents
+  status            String   @default("ouvert") @db.VarChar(30) // ouvert, en_investigation, resolu, clos
+  resolution        String?  @db.Text
+  resolvedBy        String?  @map("resolved_by") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  resolvedAt        DateTime? @map("resolved_at")
+  lot               Lot      @relation(fields: [lotId], references: [id])
+  reporter          User     @relation("dispute_reporter", fields: [reportedBy], references: [id])
+  accused           User     @relation("dispute_accused", fields: [reportedAgainst], references: [id])
+  resolver          User?    @relation("dispute_resolver", fields: [resolvedBy], references: [id])
+
+  @@map("dispute_cases")
+  @@index([lotId])
+  @@index([reportedBy])
+  @@index([reportedAgainst])
+  @@index([status])
 }

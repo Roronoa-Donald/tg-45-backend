@@ -81,9 +81,14 @@ module.exports = async function lotRoutes(app) {
     }
 
     const updated = await app.prisma.$transaction(async (tx) => {
+      const updateData = { weightKg: payload.weightKg };
+      if (payload.coopProofImageUrl) {
+        updateData.coopProofImageUrl = payload.coopProofImageUrl;
+      }
+
       const updatedLot = await tx.lot.update({
         where: { id: lot.id },
-        data: { weightKg: payload.weightKg }
+        data: updateData
       });
 
       await tx.lotEvent.create({
@@ -91,7 +96,7 @@ module.exports = async function lotRoutes(app) {
           lotId: lot.id,
           actorId: request.user.sub,
           eventType: LOT_EVENT_TYPES.UPDATE,
-          metadata: { weightKg: payload.weightKg }
+          metadata: { weightKg: payload.weightKg, coopProofImageUrl: payload.coopProofImageUrl }
         }
       });
 
@@ -114,4 +119,5 @@ module.exports = async function lotRoutes(app) {
   await app.register(require('./events'));
   await app.register(require('./transfer'));
   await app.register(require('./parcels'));
+  await app.register(require('./verification'), { prefix: '/verification' });
 };

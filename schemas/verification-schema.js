@@ -1,7 +1,7 @@
 const { z } = require('zod');
 
 const statusUpdateSchema = z.object({
-  status: z.string().min(3),
+  status: z.enum(['registered', 'validated', 'certified', 'rejected', 'shipped', 'exported']),
   reason: z.string().optional(),
   gps: z.object({ lat: z.number(), lng: z.number() }).optional()
 });
@@ -18,7 +18,7 @@ const certificationSchema = z.object({
 
 const batchVerifySchema = z.object({
   lotIds: z.array(z.string().uuid()).min(1),
-  status: z.string().min(3)
+  status: z.enum(['registered', 'validated', 'certified', 'rejected', 'shipped', 'exported'])
 });
 
 const querySchema = z.object({

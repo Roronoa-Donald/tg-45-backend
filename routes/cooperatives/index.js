@@ -3,6 +3,7 @@ const { authenticate, requireRole } = require('../../utils/auth-hooks');
 const { parseOrThrow, jsonSchema } = require('../../utils/schema');
 const { successEnvelope } = require('../../utils/response');
 const { USER_ROLES } = require('../../config/constants');
+const { AppError } = require('../../utils/errors');
 const cooperativeService = require('../../services/cooperative-service');
 const auditService = require('../../services/audit-service');
 
@@ -37,6 +38,11 @@ module.exports = async function cooperativeRoutes(app) {
   app.get('/:id/members', {
     preHandler: [authenticate, requireRole([USER_ROLES.ADMIN, USER_ROLES.COOPERATIVE])]
   }, async (request) => {
+    // Verify cooperative ownership
+    if (request.user.role === USER_ROLES.COOPERATIVE && request.params.id !== request.user.cooperativeId) {
+      throw new AppError('forbidden', 'Cannot view other cooperatives', 403);
+    }
+
     const members = await cooperativeService.listMembers(app.prisma, request.params.id);
     return successEnvelope(members);
   });

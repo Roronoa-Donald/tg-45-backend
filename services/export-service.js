@@ -1,6 +1,7 @@
 const { AppError } = require('../utils/errors');
 const { EXPORT_STATUS, EXPORT_EVENT_TYPES, LOT_STATUS, EUDR_STATUS } = require('../config/constants');
 const webhookService = require('./webhook-service');
+const reputationService = require('./reputation-service');
 
 async function notifyWebhooks(prisma, payload) {
   const hooks = await prisma.webhookSubscription.findMany({ where: { status: 'active' } });
@@ -143,7 +144,23 @@ async function generateManifest(prisma, exportId) {
 }
 
 async function updateStatus(prisma, exportId, status, payload) {
-  const exportRecord = await prisma.export.findUnique({ where: { id: exportId } });
+  const exportRecord = await prisma.export.findUnique({
+    where: { id: exportId },
+    include: {
+      lots: {
+        include: {
+          lot: {
+            select: {
+              id: true,
+              lotCode: true,
+              ownerId: true,
+            }
+          }
+        }
+      }
+    }
+  });
+
   if (!exportRecord) {
     throw new AppError('not_found', 'Export not found', 404);
   }
@@ -161,6 +178,19 @@ async function updateStatus(prisma, exportId, status, payload) {
         payload
       }
     });
+
+    // Si l'export est rejeté, pénaliser la réputation des propriétaires des lots
+    if (status === 'rejected' && exportRecord.lots && exportRecord.lots.length > 0) {
+      for (const exportLot of exportRecord.lots) {
+        await reputationService.recordEvent(
+          tx,
+          exportLot.lot.ownerId,
+          reputationService.EVENT_TYPES.LOT_REJECTED_BY_EXPORTER,
+          exportLot.lot.id,
+          payload.note || 'Export rejeté par l\'exportateur'
+        );
+      }
+    }
 
     return record;
   });

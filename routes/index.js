@@ -15,5 +15,8 @@ module.exports = async function registerRoutes(app) {
   await app.register(require('./ministry'), { prefix: '/ministry' });
   await app.register(require('./audio-collector'), { prefix: '/audio-collector' });
   await app.register(require('./media'), { prefix: '/media' });
+  await app.register(require('./disputes'), { prefix: '/disputes' });
+  await app.register(require('./reputation'), { prefix: '/reputation' });
+  await app.register(require('./farmer-card'), { prefix: '/farmer-card' });
 };
 

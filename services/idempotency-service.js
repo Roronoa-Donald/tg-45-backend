@@ -16,13 +16,26 @@ async function begin(prisma, key, route, userId, payload) {
     throw new AppError('idempotency_in_progress', 'Idempotency key already in progress', 409);
   }
 
-  await repo.createKey(prisma, {
-    key,
-    route,
-    userId,
-    requestHash: hashPayload(payload),
-    status: 'pending'
-  });
+  try {
+    await repo.createKey(prisma, {
+      key,
+      route,
+      userId,
+      requestHash: hashPayload(payload),
+      status: 'pending'
+    });
+  } catch (err) {
+    // Handle race condition where another request created the key between our check and create
+    if (err.code === 'P2002') {
+      // Unique constraint violation - key was created by another request
+      const raceExisting = await repo.findByKey(prisma, key);
+      if (raceExisting && raceExisting.status === 'completed') {
+        return { replay: true, response: raceExisting.response };
+      }
+      throw new AppError('idempotency_in_progress', 'Idempotency key already in progress', 409);
+    }
+    throw err;
+  }
 
   return { replay: false };
 }

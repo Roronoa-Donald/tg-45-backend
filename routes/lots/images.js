@@ -2,6 +2,7 @@ const { successEnvelope } = require('../../utils/response');
 const { authenticate, requireRole } = require('../../utils/auth-hooks');
 const { USER_ROLES } = require('../../config/constants');
 const lotService = require('../../services/lot-service');
+const exifService = require('../../services/exif-service');
 
 module.exports = async function lotImageRoutes(app) {
   app.post('/:id/images', {

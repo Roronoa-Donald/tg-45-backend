@@ -3,6 +3,7 @@ const { successEnvelope } = require('../../utils/response');
 const { USER_ROLES, LOT_STATUS } = require('../../config/constants');
 const { AppError } = require('../../utils/errors');
 const auditService = require('../../services/audit-service');
+const reputationService = require('../../services/reputation-service');
 
 module.exports = async function ministryRoutes(app) {
   // 1. Dashboard KPIs
@@ -115,5 +116,31 @@ module.exports = async function ministryRoutes(app) {
     });
 
     return successEnvelope(updated);
+  });
+
+  // 5. Get users with critical reputation scores
+  app.get('/reputation/critical', {
+    preHandler: [authenticate, requireRole([USER_ROLES.MINISTRY, USER_ROLES.ADMIN])]
+  }, async () => {
+    const criticalUsers = await reputationService.getCriticalUsers(app.prisma);
+    return successEnvelope(criticalUsers);
+  });
+
+  // 6. Get reputation statistics
+  app.get('/reputation/statistics', {
+    preHandler: [authenticate, requireRole([USER_ROLES.MINISTRY, USER_ROLES.ADMIN])]
+  }, async () => {
+    const stats = await reputationService.getStatistics(app.prisma);
+    return successEnvelope(stats);
+  });
+
+  // 7. Get reputation history for a specific user
+  app.get('/reputation/user/:userId', {
+    preHandler: [authenticate, requireRole([USER_ROLES.MINISTRY, USER_ROLES.ADMIN])]
+  }, async (request) => {
+    const { userId } = request.params;
+    const limit = request.query.limit ? parseInt(request.query.limit) : 50;
+    const history = await reputationService.getHistory(app.prisma, userId, limit);
+    return successEnvelope(history);
   });
 };

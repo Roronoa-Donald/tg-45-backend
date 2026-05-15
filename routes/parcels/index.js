@@ -6,6 +6,7 @@ const { parsePagination, buildMeta } = require('../../utils/pagination');
 const { USER_ROLES } = require('../../config/constants');
 const { AppError } = require('../../utils/errors');
 const parcelService = require('../../services/parcel-service');
+const parcelValidationService = require('../../services/parcel-validation-service');
 const auditService = require('../../services/audit-service');
 
 function canAccessParcel(user, parcel) {
@@ -68,6 +69,13 @@ module.exports = async function parcelRoutes(app) {
       request.user.sub
     );
 
+    // Auto-assign a verifier for terrain validation
+    try {
+      await parcelValidationService.assignVerifierToParcel(app.prisma, parcel.id);
+    } catch (err) {
+      console.warn('Could not assign verifier to parcel:', err.message);
+    }
+
     await auditService.log(app.prisma, {
       actorId: request.user.sub,
       action: 'create_parcel',
@@ -127,4 +135,7 @@ module.exports = async function parcelRoutes(app) {
 
     return successEnvelope(updated);
   });
+
+  // Register validation sub-routes
+  await app.register(require('./validation'), { prefix: '/validation' });
 };

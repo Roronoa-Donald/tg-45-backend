@@ -3,6 +3,7 @@ const { registerSchema } = require('../../schemas/auth-schema');
 const { parseOrThrow } = require('../../utils/schema');
 const { successEnvelope } = require('../../utils/response');
 const { USER_ROLES } = require('../../config/constants');
+const { AppError } = require('../../utils/errors');
 const env = require('../../config/env');
 const userRepository = require('../../repositories/user-repository');
 
@@ -12,7 +13,7 @@ module.exports = async function registerRoute(app) {
     const payload = parseOrThrow(registerSchema, request.body);
 
     if (payload.role && payload.role !== USER_ROLES.FARMER) {
-      return { success: false, error: { message: 'Only farmer self-registration allowed' } };
+      throw new AppError('forbidden', 'Only farmer self-registration allowed', 403);
     }
 
     const hash = await bcrypt.hash(payload.secret, env.bcryptSaltRounds);

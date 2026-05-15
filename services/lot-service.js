@@ -4,6 +4,7 @@ const { LOT_EVENT_TYPES, LOT_STATUS } = require('../config/constants');
 const lotRepository = require('../repositories/lot-repository');
 const blockchainService = require('./blockchain-service');
 const mediaService = require('./media-service');
+const lotVerificationService = require('./lot-verification-service');
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -35,12 +36,29 @@ function normalizePolygonRing(geometry) {
 }
 
 function pointInPolygon(lng, lat, ring) {
+  // Validate ring structure before iteration
+  if (!Array.isArray(ring) || ring.length < 3) {
+    return false;
+  }
+
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    // Validate each coordinate pair
+    if (!Array.isArray(ring[i]) || !Array.isArray(ring[j]) ||
+        ring[i].length < 2 || ring[j].length < 2) {
+      return false;
+    }
     const xi = ring[i][0];
     const yi = ring[i][1];
     const xj = ring[j][0];
     const yj = ring[j][1];
+
+    // Validate coordinates are numbers
+    if (typeof xi !== 'number' || typeof yi !== 'number' ||
+        typeof xj !== 'number' || typeof yj !== 'number') {
+      return false;
+    }
+
     const intersect = ((yi > lat) !== (yj > lat)) &&
       (lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi);
     if (intersect) {
@@ -198,6 +216,26 @@ async function registerLot(prisma, payload, actorId, blockchain, requestId) {
     await lotRepository.updateLotProof(prisma, lot.id, proof);
   }
 
+  // Auto-assign verifiers based on parcel validation status
+  try {
+    await lotVerificationService.assignVerifiersToLot(prisma, lot.id);
+  } catch (err) {
+    // Mark lot with special status to indicate verification assignment failed
+    await prisma.lot.update({
+      where: { id: lot.id },
+      data: { verificationStatus: 'assignment_failed' }
+    });
+    // Create an alert for ministry/admin
+    await prisma.lotEvent.create({
+      data: {
+        lotId: lot.id,
+        actorId,
+        eventType: 'verification_assignment_failed',
+        metadata: { error: err.message, requiresAttention: true }
+      }
+    });
+  }
+
   return lotRepository.findLotById(prisma, lot.id);
 }
 
@@ -266,6 +304,10 @@ async function addImage(prisma, storage, lotId, buffer, actorId) {
     throw new AppError('not_found', 'Lot not found', 404);
   }
 
+  // Extraire les métadonnées EXIF du buffer
+  const exifService = require('./exif-service');
+  const exifData = await exifService.extractExif(buffer);
+
   const uploaded = await mediaService.uploadLotImage(storage, buffer);
 
   const image = await lotRepository.addLotImage(prisma, {
@@ -273,14 +315,23 @@ async function addImage(prisma, storage, lotId, buffer, actorId) {
     url: uploaded.url,
     publicId: uploaded.publicId,
     checksum: uploaded.checksum,
-    isPrimary: lot.images.length === 0
+    isPrimary: lot.images.length === 0,
+    exifData: exifData ? JSON.stringify(exifData) : null,
+    gpsLat: exifData?.gps?.lat || null,
+    gpsLng: exifData?.gps?.lng || null,
+    takenAt: exifData?.dateTaken || null
   });
 
   await lotRepository.addLotEvent(prisma, {
     lotId,
     actorId,
     eventType: LOT_EVENT_TYPES.MEDIA_UPLOAD,
-    metadata: { imageId: image.id }
+    metadata: {
+      imageId: image.id,
+      hasExif: !!exifData,
+      hasGps: !!(exifData?.gps),
+      hasTakenAt: !!(exifData?.dateTaken)
+    }
   });
 
   return image;

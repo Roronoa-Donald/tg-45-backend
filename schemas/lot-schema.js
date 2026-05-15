@@ -34,7 +34,8 @@ const lotTransferSchema = z.object({
 });
 
 const lotDetailsSchema = z.object({
-  weightKg: z.number().positive()
+  weightKg: z.number().positive(),
+  coopProofImageUrl: z.string().url().optional()
 });
 
 module.exports = {

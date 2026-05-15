@@ -1,8 +1,51 @@
 const { AppError } = require('../utils/errors');
 
+function validateGeoJSON(geometry, geometryType) {
+  if (!geometry || typeof geometry !== 'object') {
+    return false;
+  }
+
+  if (geometryType === 'polygon' || geometryType === 'Polygon') {
+    // Validate Polygon GeoJSON structure
+    if (geometry.type !== 'Polygon' || !Array.isArray(geometry.coordinates)) {
+      return false;
+    }
+    const coords = geometry.coordinates;
+    if (!Array.isArray(coords[0]) || coords[0].length < 4) {
+      return false;
+    }
+    // Each coordinate should be [lng, lat]
+    for (const coord of coords[0]) {
+      if (!Array.isArray(coord) || coord.length < 2 || typeof coord[0] !== 'number' || typeof coord[1] !== 'number') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (geometryType === 'point' || geometryType === 'Point') {
+    // Validate Point GeoJSON structure
+    if (geometry.type !== 'Point' || !Array.isArray(geometry.coordinates)) {
+      return false;
+    }
+    const coords = geometry.coordinates;
+    if (coords.length < 2 || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 async function createParcel(prisma, payload, actorId) {
   if (payload.areaHa && payload.areaHa > 4 && payload.geometryType !== 'polygon') {
     throw new AppError('invalid_geometry', 'Polygon required for parcels above 4ha', 400);
+  }
+
+  // Validate GeoJSON structure
+  if (payload.geometry && !validateGeoJSON(payload.geometry, payload.geometryType)) {
+    throw new AppError('invalid_geojson', 'Invalid GeoJSON structure for the specified geometry type', 400);
   }
 
   const ownerId = payload.ownerId || actorId;
@@ -37,6 +80,11 @@ async function updateParcel(prisma, id, payload) {
 
   if (payload.areaHa && payload.areaHa > 4 && nextGeometryType !== 'polygon') {
     throw new AppError('invalid_geometry', 'Polygon required for parcels above 4ha', 400);
+  }
+
+  // Validate GeoJSON structure if geometry is being updated
+  if (payload.geometry && !validateGeoJSON(payload.geometry, nextGeometryType)) {
+    throw new AppError('invalid_geojson', 'Invalid GeoJSON structure for the specified geometry type', 400);
   }
 
   return prisma.parcel.update({
