@@ -66,14 +66,21 @@ async function assignVerifiersToLot(prisma, lotId) {
       });
 
       // Créer certification automatique
-      await tx.lotCertification.create({
-        data: {
-          lotId,
-          verifierId: null,
-          signature: null,
-          certifiedAt: new Date()
-        }
+      const anyVerifier = await tx.user.findFirst({
+        where: { role: 'verifier', status: { in: ['approved', 'active'] } },
+        select: { id: true }
       });
+
+      if (anyVerifier) {
+        await tx.lotCertification.create({
+          data: {
+            lotId,
+            verifierId: anyVerifier.id,
+            signature: null,
+            status: 'approved'
+          }
+        });
+      }
 
       // Reputation +5 pour le farmer
       const reputationService = require('./reputation-service');
@@ -144,14 +151,22 @@ async function assignVerifiersToLot(prisma, lotId) {
       });
 
       // Créer certification automatique
-      await tx.lotCertification.create({
-        data: {
-          lotId,
-          verifierId: null,
-          signature: null,
-          certifiedAt: new Date()
-        }
+      // Trouver un verifier pour la certification
+      const anyVerifier = await tx.user.findFirst({
+        where: { role: 'verifier', status: { in: ['approved', 'active'] } },
+        select: { id: true }
       });
+
+      if (anyVerifier) {
+        await tx.lotCertification.create({
+          data: {
+            lotId,
+            verifierId: anyVerifier.id,
+            signature: null,
+            status: 'approved'
+          }
+        });
+      }
 
       // Reputation +5 pour le farmer
       const lotWithOwner = await tx.lot.findUnique({
@@ -396,14 +411,22 @@ async function checkAndFinalizeVote(prisma, lotId) {
 
     // Si approuvé, créer automatiquement la certification
     if (isApproved) {
-      await tx.lotCertification.create({
-        data: {
-          lotId,
-          verifierId: null, // Certification automatique par vote 51%
-          signature: null,
-          certifiedAt: new Date()
-        }
+      // Trouver un verifier pour la certification
+      const anyVerifier = await tx.user.findFirst({
+        where: { role: 'verifier', status: { in: ['approved', 'active'] } },
+        select: { id: true }
       });
+
+      if (anyVerifier) {
+        await tx.lotCertification.create({
+          data: {
+            lotId,
+            verifierId: anyVerifier.id,
+            signature: null,
+            status: 'approved'
+          }
+        });
+      }
 
       await tx.lotEvent.create({
         data: {
