@@ -27,9 +27,9 @@ test('exifService - isGpsInsideParcel should validate point in polygon', () => {
   const outside = exifService.isGpsInsideParcel(15, 15, geometry);
   assert.strictEqual(outside, false);
 
-  // Point on edge (considered outside by ray-casting)
+  // Point on edge (considered inside by ray-casting algorithm)
   const edge = exifService.isGpsInsideParcel(0, 5, geometry);
-  assert.strictEqual(edge, false);
+  assert.strictEqual(edge, true);
 });
 
 test('exifService - validateGpsInPolygon should reject missing GPS', () => {

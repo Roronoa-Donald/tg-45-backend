@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
+    "start:prod": "npx prisma migrate deploy && node server.js",
     "test": "node --test",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",

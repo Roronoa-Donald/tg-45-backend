@@ -78,6 +78,15 @@ module.exports = async function audioCollectorRoutes(app) {
     return successEnvelope(updatedTranslation);
   });
 
+  // 2.5 Public: Get all recorded translations for mobile app
+  app.get('/translations', async (request) => {
+    const translations = await app.prisma.audioTranslation.findMany({
+      where: { status: 'RECORDED' },
+      select: { langCode: true, phraseKey: true, audioUrl: true }
+    });
+    return successEnvelope(translations);
+  });
+
   // 3. Admin: Get all translations (to review)
   app.get('/admin/translations', async (request) => {
     const password = request.headers['x-admin-password'];
