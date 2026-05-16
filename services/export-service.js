@@ -49,7 +49,7 @@ async function declareExport(prisma, exporterId, payload) {
   }
 
   const notEudrReady = lots.find((lot) => ![EUDR_STATUS.APPROVED, EUDR_STATUS.SUBMITTED].includes(lot.eudrStatus));
-  if (notEudrReady) {
+  if (notEudrReady && process.env.DEMO_MODE !== 'true') {
     throw new AppError('eudr_not_ready', 'Lot EUDR dossier not approved', 400, {
       lotId: notEudrReady.id,
       eudrStatus: notEudrReady.eudrStatus
