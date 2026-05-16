@@ -65,6 +65,9 @@ module.exports = async function eudrRoutes(app) {
     if (request.query.status) {
       filters.status = request.query.status;
     }
+    if (request.query.lotId) {
+      filters.lotId = request.query.lotId;
+    }
 
     const ddrs = await app.prisma.eudrDueDiligence.findMany({
       where: filters,
