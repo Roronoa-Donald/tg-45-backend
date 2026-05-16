@@ -50,8 +50,7 @@ async function assignVerifiersToLot(prisma, lotId) {
         where: { id: lotId },
         data: {
           verificationStatus: 'demo_certified',
-          autoValidated: true,
-          status: 'certified'
+          autoValidated: true
         }
       });
 
@@ -135,8 +134,7 @@ async function assignVerifiersToLot(prisma, lotId) {
         data: {
           verificationStatus: 'auto_validated',
           autoValidated: true,
-          spotCheck: false,
-          status: 'certified' // Directement certifié
+          spotCheck: false
         }
       });
 

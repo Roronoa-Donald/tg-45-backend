@@ -69,6 +69,29 @@ async function assignStatus(prisma, lotId, status, actorId, reason, gps, userCoo
     eventType: LOT_EVENT_TYPES.VERIFY,
     metadata: { status, reason, gps }
   });
+
+  // Si la cooperative valide le lot et que le lot est pre-qualifie "autoValidated",
+  // on passe automatiquement le statut final a CERTIFIED.
+  if (status === LOT_STATUS.VALIDATED && lot.autoValidated) {
+    await lotRepository.updateLotStatus(prisma, lotId, LOT_STATUS.CERTIFIED);
+    await lotRepository.addLotEvent(prisma, {
+      lotId,
+      actorId: 'system',
+      eventType: LOT_EVENT_TYPES.CERTIFY,
+      metadata: { status: LOT_STATUS.CERTIFIED, reason: 'Auto-validation pre-approuvee' }
+    });
+    
+    await reputationService.recordEvent(
+      prisma,
+      lot.ownerId,
+      reputationService.EVENT_TYPES.LOT_CERTIFIED,
+      lot.id,
+      'Lot certifie (auto-validation)'
+    );
+
+    return lotRepository.findLotById(prisma, lotId);
+  }
+
   return updated;
 }
 
