@@ -50,10 +50,21 @@ module.exports = async function lotRoutes(app) {
     preHandler: [authenticate],
   }, async (request) => {
     const pagination = parsePagination(request.query || {});
-    const ownerId = request.user.role === 'farmer' ? request.user.sub : undefined;
+    const query = { ...request.query };
+
+    // Farmers only see their own lots
+    if (request.user.role === USER_ROLES.FARMER) {
+      query.ownerId = request.user.sub;
+    }
+
+    // Cooperatives see lots from their farmers
+    if (request.user.role === USER_ROLES.COOPERATIVE) {
+      query.cooperativeId = request.user.cooperativeId;
+    }
+
     const { total, items } = await lotService.listLots(
-      app.prisma, 
-      { ...request.query, ownerId },
+      app.prisma,
+      query,
       pagination
     );
     return successEnvelope(items, buildMeta(pagination.page, pagination.pageSize, total));
@@ -63,6 +74,33 @@ module.exports = async function lotRoutes(app) {
     preHandler: [authenticate]
   }, async (request) => {
     const lot = await lotService.getLot(app.prisma, request.params.id);
+
+    // Ajouter progression de vérification (sans révéler les noms des verificateurs)
+    if (lot.verifications && lot.verifications.length > 0) {
+      const totalVotes = lot.verifications.length;
+      const completedVotes = lot.verifications.filter(v => v.vote !== null).length;
+      const approveVotes = lot.verifications.filter(v => v.vote === 'approve').length;
+      const rejectVotes = lot.verifications.filter(v => v.vote === 'reject').length;
+
+      lot.verificationProgress = {
+        totalVotes,
+        completedVotes,
+        approveVotes,
+        rejectVotes,
+        pendingVotes: totalVotes - completedVotes,
+        approvalRatio: totalVotes > 0 ? Math.round((approveVotes / totalVotes) * 100) : 0,
+        thresholdNeeded: Math.ceil(totalVotes * 0.51),
+        status: completedVotes === totalVotes
+          ? (approveVotes >= Math.ceil(totalVotes * 0.51) ? 'approved' : 'rejected')
+          : 'pending'
+      };
+
+      // Supprimer les détails des verifications pour ne garder que la progression
+      delete lot.verifications;
+    } else {
+      lot.verificationProgress = null;
+    }
+
     return successEnvelope(lot);
   });
 
@@ -120,4 +158,5 @@ module.exports = async function lotRoutes(app) {
   await app.register(require('./transfer'));
   await app.register(require('./parcels'));
   await app.register(require('./verification'), { prefix: '/verification' });
+  await app.register(require('./history'), { prefix: '/history' });
 };

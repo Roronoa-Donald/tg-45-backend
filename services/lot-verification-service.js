@@ -30,7 +30,8 @@ async function assignVerifiersToLot(prisma, lotId) {
     where: { id: lotId },
     include: {
       parcels: { include: { parcel: true } },
-      verifications: true
+      verifications: true,
+      owner: { select: { id: true } }
     }
   });
 
@@ -42,29 +43,69 @@ async function assignVerifiersToLot(prisma, lotId) {
     return lot.verifications;
   }
 
+  // MODE DEMO: Auto-certifier instantanément
+  if (process.env.DEMO_MODE === 'true') {
+    await prisma.$transaction(async (tx) => {
+      await tx.lot.update({
+        where: { id: lotId },
+        data: {
+          verificationStatus: 'demo_certified',
+          autoValidated: true,
+          status: 'certified'
+        }
+      });
+
+      await tx.lotEvent.create({
+        data: {
+          lotId,
+          eventType: 'demo_auto_certified',
+          metadata: {
+            reason: 'Mode démo - certification instantanée'
+          }
+        }
+      });
+
+      // Créer certification automatique
+      await tx.lotCertification.create({
+        data: {
+          lotId,
+          verifierId: null,
+          signature: null,
+          certifiedAt: new Date()
+        }
+      });
+
+      // Reputation +5 pour le farmer
+      const reputationService = require('./reputation-service');
+      await reputationService.recordEvent(
+        tx,
+        lot.owner.id,
+        reputationService.EVENT_TYPES.LOT_CERTIFIED,
+        lotId,
+        'Lot certifié (mode démo)'
+      );
+    });
+
+    console.log(`[DEMO MODE] Lot ${lotId} auto-certifié instantanément`);
+    return [];
+  }
+
   const allParcelsValid = await checkAllParcelsValid(prisma, lot.parcels);
 
   if (allParcelsValid) {
     const isSpotCheck = Math.random() < SPOT_CHECK_PROBABILITY;
 
-    await prisma.lot.update({
-      where: { id: lotId },
-      data: {
-        verificationStatus: 'auto_validated',
-        autoValidated: true,
-        spotCheck: isSpotCheck
-      }
-    });
-
     if (isSpotCheck) {
+      // Spot-check: doit passer par vote 51%
       const verifierIds = await getRandomVerifiers(prisma, VERIFIERS_PER_LOT);
       const voteDeadline = new Date(Date.now() + VOTE_DEADLINE_HOURS * 60 * 60 * 1000);
 
-      // Use distinct status for spot-check lots to differentiate from regular auto-validated lots
       await prisma.lot.update({
         where: { id: lotId },
         data: {
           verificationStatus: 'spot_check_pending',
+          autoValidated: false,
+          spotCheck: true,
           voteDeadline
         }
       });
@@ -79,6 +120,54 @@ async function assignVerifiersToLot(prisma, lotId) {
 
       return verifications;
     }
+
+    // Auto-validation: passe directement à certified
+    await prisma.$transaction(async (tx) => {
+      await tx.lot.update({
+        where: { id: lotId },
+        data: {
+          verificationStatus: 'auto_validated',
+          autoValidated: true,
+          spotCheck: false,
+          status: 'certified' // Directement certifié
+        }
+      });
+
+      await tx.lotEvent.create({
+        data: {
+          lotId,
+          eventType: 'auto_validated',
+          metadata: {
+            reason: 'Parcelle validée < 30 jours, auto-certification'
+          }
+        }
+      });
+
+      // Créer certification automatique
+      await tx.lotCertification.create({
+        data: {
+          lotId,
+          verifierId: null,
+          signature: null,
+          certifiedAt: new Date()
+        }
+      });
+
+      // Reputation +5 pour le farmer
+      const lotWithOwner = await tx.lot.findUnique({
+        where: { id: lotId },
+        select: { ownerId: true }
+      });
+
+      const reputationService = require('./reputation-service');
+      await reputationService.recordEvent(
+        tx,
+        lotWithOwner.ownerId,
+        reputationService.EVENT_TYPES.LOT_CERTIFIED,
+        lotId,
+        'Lot auto-certifié (parcelle validée)'
+      );
+    });
 
     return [];
   }
@@ -261,7 +350,10 @@ async function checkAndFinalizeVote(prisma, lotId) {
   await prisma.$transaction(async (tx) => {
     const lot = await tx.lot.findUnique({
       where: { id: lotId },
-      include: { verifications: true }
+      include: {
+        verifications: true,
+        owner: { select: { id: true } }
+      }
     });
 
     if (!lot || lot.verificationStatus === 'validated' || lot.verificationStatus === 'rejected') {
@@ -278,12 +370,62 @@ async function checkAndFinalizeVote(prisma, lotId) {
     const approveCount = completedVotes.filter(v => v.vote === 'approve').length;
     const approvalRatio = approveCount / totalVerifiers;
 
-    const newStatus = approvalRatio >= VOTE_THRESHOLD ? 'validated' : 'rejected';
+    const isApproved = approvalRatio >= VOTE_THRESHOLD;
+    const newVerificationStatus = isApproved ? 'validated' : 'rejected';
+    const newLotStatus = isApproved ? 'certified' : 'rejected';
 
     await tx.lot.update({
       where: { id: lotId },
-      data: { verificationStatus: newStatus }
+      data: {
+        verificationStatus: newVerificationStatus,
+        status: newLotStatus
+      }
     });
+
+    await tx.lotEvent.create({
+      data: {
+        lotId,
+        eventType: isApproved ? 'vote_approved' : 'vote_rejected',
+        metadata: {
+          approveCount,
+          totalVerifiers,
+          approvalRatio: `${(approvalRatio * 100).toFixed(1)}%`
+        }
+      }
+    });
+
+    // Si approuvé, créer automatiquement la certification
+    if (isApproved) {
+      await tx.lotCertification.create({
+        data: {
+          lotId,
+          verifierId: null, // Certification automatique par vote 51%
+          signature: null,
+          certifiedAt: new Date()
+        }
+      });
+
+      await tx.lotEvent.create({
+        data: {
+          lotId,
+          eventType: 'auto_certified',
+          metadata: {
+            reason: 'Certification automatique après vote 51%',
+            approvalRatio: `${(approvalRatio * 100).toFixed(1)}%`
+          }
+        }
+      });
+
+      // Enregistrer événement reputation pour le farmer
+      const reputationService = require('./reputation-service');
+      await reputationService.recordEvent(
+        tx,
+        lot.owner.id,
+        reputationService.EVENT_TYPES.LOT_CERTIFIED,
+        lot.id,
+        'Lot certifié par vote 51%'
+      );
+    }
   });
 }
 

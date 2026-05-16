@@ -69,11 +69,57 @@ module.exports = async function parcelRoutes(app) {
       request.user.sub
     );
 
-    // Auto-assign a verifier for terrain validation
-    try {
-      await parcelValidationService.assignVerifierToParcel(app.prisma, parcel.id);
-    } catch (err) {
-      console.warn('Could not assign verifier to parcel:', err.message);
+    // Anchor parcel on blockchain
+    if (app.blockchain && app.blockchain.enabled) {
+      try {
+        const blockchainService = require('../../services/blockchain-service');
+        const { proofHash, txHash } = await blockchainService.anchorProof(app.blockchain, {
+          parcelId: parcel.id,
+          ownerId: parcel.ownerId,
+          geometry: parcel.geometry,
+          geometryType: parcel.geometryType,
+          areaHa: parcel.areaHa,
+          actorId: request.user.sub,
+          requestId: request.id
+        });
+
+        await app.prisma.parcel.update({
+          where: { id: parcel.id },
+          data: {
+            blockchainTxHash: txHash,
+            blockchainProofHash: proofHash
+          }
+        });
+
+        parcel.blockchainTxHash = txHash;
+        parcel.blockchainProofHash = proofHash;
+      } catch (err) {
+        console.warn('Blockchain anchoring failed (non-fatal):', err.message);
+      }
+    }
+
+    // MODE DEMO: Auto-valider la parcelle immédiatement
+    if (process.env.DEMO_MODE === 'true') {
+      try {
+        const validUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 an
+        await app.prisma.parcel.update({
+          where: { id: parcel.id },
+          data: {
+            validationStatus: 'validated',
+            validUntil
+          }
+        });
+        console.log(`[DEMO MODE] Parcelle ${parcel.id} auto-validée instantanément`);
+      } catch (err) {
+        console.warn('Demo auto-validation failed:', err.message);
+      }
+    } else {
+      // Auto-assign a verifier for terrain validation
+      try {
+        await parcelValidationService.assignVerifierToParcel(app.prisma, parcel.id);
+      } catch (err) {
+        console.warn('Could not assign verifier to parcel:', err.message);
+      }
     }
 
     await auditService.log(app.prisma, {

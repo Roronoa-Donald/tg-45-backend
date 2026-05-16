@@ -66,4 +66,18 @@ module.exports = async function reputationRoutes(app) {
     const stats = await reputationService.getStatistics(app.prisma);
     return successEnvelope(stats);
   });
+
+  /**
+   * GET /reputation/leaderboard
+   * Obtenir le classement des utilisateurs par score
+   */
+  app.get('/leaderboard', {
+    preHandler: [authenticate]
+  }, async (request) => {
+    const limit = parseInt(request.query.limit) || 10;
+    const role = request.query.role;
+
+    const leaderboard = await reputationService.getLeaderboard(app.prisma, limit, role);
+    return successEnvelope({ leaderboard });
+  });
 };

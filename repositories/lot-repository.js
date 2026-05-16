@@ -13,7 +13,15 @@ async function findLotById(prisma, id) {
       images: true,
       certification: true,
       parcels: { include: { parcel: true } },
-      eudrDueDiligence: true
+      eudrDueDiligence: true,
+      verifications: {
+        select: {
+          id: true,
+          vote: true,
+          createdAt: true
+          // Ne pas inclure verifierId ni verifier pour masquer les noms
+        }
+      }
     }
   });
 }
@@ -29,7 +37,15 @@ async function findLotByCode(prisma, lotCode) {
       images: true,
       certification: true,
       parcels: { include: { parcel: true } },
-      eudrDueDiligence: true
+      eudrDueDiligence: true,
+      verifications: {
+        select: {
+          id: true,
+          vote: true,
+          createdAt: true
+          // Ne pas inclure verifierId ni verifier pour masquer les noms
+        }
+      }
     }
   });
 }

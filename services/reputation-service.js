@@ -194,6 +194,91 @@ async function getStatistics(prisma) {
   };
 }
 
+/**
+ * Get reputation with level
+ */
+async function getReputation(prisma, userId) {
+  const score = await getOrCreateScore(prisma, userId);
+  const isCritical = score.score <= CRITICAL_THRESHOLD;
+
+  // Calculate level based on score
+  let level = 'Debutant';
+  if (score.score >= 200) level = 'Expert';
+  else if (score.score >= 150) level = 'Avance';
+  else if (score.score >= 100) level = 'Intermediaire';
+  else if (score.score >= 50) level = 'Novice';
+  else level = 'Critique';
+
+  return {
+    userId: score.userId,
+    score: score.score,
+    level,
+    isCritical,
+    threshold: CRITICAL_THRESHOLD,
+    updatedAt: score.updatedAt
+  };
+}
+
+/**
+ * Get reputation history with pagination
+ */
+async function getReputationHistory(prisma, userId, pagination = { page: 1, pageSize: 20 }) {
+  const skip = (pagination.page - 1) * pagination.pageSize;
+
+  const [total, events] = await Promise.all([
+    prisma.reputationEvent.count({ where: { userId } }),
+    prisma.reputationEvent.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: pagination.pageSize,
+      include: {
+        lot: {
+          select: {
+            id: true,
+            lotCode: true,
+            product: true,
+            status: true
+          }
+        }
+      }
+    })
+  ]);
+
+  return { events, total };
+}
+
+/**
+ * Get leaderboard (top performers)
+ */
+async function getLeaderboard(prisma, limit = 10, role = null) {
+  const where = role ? { user: { role } } : {};
+
+  const topScores = await prisma.reputationScore.findMany({
+    where,
+    orderBy: { score: 'desc' },
+    take: limit,
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          role: true
+        }
+      }
+    }
+  });
+
+  return topScores.map((s, index) => ({
+    rank: index + 1,
+    userId: s.userId,
+    userName: s.user.name,
+    userRole: s.user.role,
+    score: s.score,
+    updatedAt: s.updatedAt
+  }));
+}
+
 module.exports = {
   EVENT_TYPES,
   EVENT_POINTS,
@@ -201,7 +286,10 @@ module.exports = {
   getOrCreateScore,
   recordEvent,
   getScore,
+  getReputation,
   getHistory,
+  getReputationHistory,
+  getLeaderboard,
   getCriticalUsers,
   getStatistics,
 };

@@ -173,14 +173,95 @@ async function routes(app) {
     async (request) => {
       const { note } = request.body;
 
-      const dispute = await disputeService.addNote(
+      const event = await disputeService.addNote(
         app.prisma,
         request.params.id,
         request.user.sub,
         note
       );
 
+      return { data: event };
+    }
+  );
+
+  // Add evidence to dispute (reporter or accused)
+  app.post(
+    '/:id/evidence',
+    {
+      preHandler: [authenticate],
+    },
+    async (request) => {
+      const { evidenceType, evidenceUrl, description, metadata } = request.body;
+
+      const dispute = await disputeService.getDisputeById(app.prisma, request.params.id);
+
+      // Check access: must be reporter or accused
+      const canAddEvidence =
+        dispute.reportedBy === request.user.sub ||
+        dispute.reportedAgainst === request.user.sub;
+
+      if (!canAddEvidence) {
+        const { AppError } = require('../../utils/errors');
+        throw new AppError('forbidden', 'Seuls les parties peuvent ajouter des preuves', 403);
+      }
+
+      const event = await disputeService.addEvidence(
+        app.prisma,
+        request.params.id,
+        request.user.sub,
+        { evidenceType, evidenceUrl, description, metadata }
+      );
+
+      return { data: event };
+    }
+  );
+
+  // Assign investigator to dispute (Ministry/Admin only)
+  app.post(
+    '/:id/assign',
+    {
+      preHandler: [
+        authenticate,
+        app.requireRole([USER_ROLES.MINISTRY, USER_ROLES.ADMIN]),
+      ],
+    },
+    async (request) => {
+      const { investigatorId } = request.body;
+
+      const dispute = await disputeService.assignInvestigator(
+        app.prisma,
+        request.params.id,
+        investigatorId
+      );
+
       return { data: dispute };
+    }
+  );
+
+  // Get dispute timeline
+  app.get(
+    '/:id/timeline',
+    {
+      preHandler: [authenticate],
+    },
+    async (request) => {
+      const dispute = await disputeService.getDisputeById(app.prisma, request.params.id);
+
+      // Check access: must be involved in dispute or be ministry/admin
+      const isInvolved =
+        dispute.reportedBy === request.user.sub ||
+        dispute.reportedAgainst === request.user.sub ||
+        request.user.role === USER_ROLES.MINISTRY ||
+        request.user.role === USER_ROLES.ADMIN;
+
+      if (!isInvolved) {
+        const { AppError } = require('../../utils/errors');
+        throw new AppError('forbidden', 'Vous n\'avez pas accès à ce litige', 403);
+      }
+
+      const timeline = await disputeService.getDisputeTimeline(app.prisma, request.params.id);
+
+      return { data: timeline };
     }
   );
 }

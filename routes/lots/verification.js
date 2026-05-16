@@ -29,16 +29,13 @@ module.exports = async function lotVerificationRoutes(app) {
     return successEnvelope(items, buildMeta(pagination.page, pagination.pageSize, total));
   });
 
+  // DEPRECATED: Auto-validated lots now pass directly to 'certified' status
+  // This endpoint is kept for backward compatibility but will return empty results
   app.get('/auto-validated', {
     preHandler: [authenticate, requireRole([USER_ROLES.VERIFIER])]
   }, async (request) => {
-    const pagination = parsePagination(request.query || {});
-    const { total, items } = await lotVerificationService.getAutoValidatedLots(
-      app.prisma,
-      request.user.sub,
-      pagination
-    );
-    return successEnvelope(items, buildMeta(pagination.page, pagination.pageSize, total));
+    // Return empty array since auto-validated lots are now directly certified
+    return successEnvelope([], buildMeta(1, 20, 0));
   });
 
   app.get('/spot-check', {
@@ -98,5 +95,69 @@ module.exports = async function lotVerificationRoutes(app) {
     });
 
     return successEnvelope(result);
+  });
+
+  // Get verification status of a specific lot
+  app.get('/:lotId/status', {
+    preHandler: [authenticate]
+  }, async (request) => {
+    const lot = await app.prisma.lot.findUnique({
+      where: { id: request.params.lotId },
+      select: {
+        id: true,
+        lotCode: true,
+        status: true,
+        verificationStatus: true,
+        autoValidated: true,
+        spotCheck: true,
+        voteDeadline: true,
+        escalatedAt: true,
+        verifications: {
+          select: {
+            id: true,
+            vote: true,
+            createdAt: true
+            // Ne pas inclure verifierId ni verifier pour masquer les noms
+          }
+        }
+      }
+    });
+
+    if (!lot) {
+      throw new AppError('not_found', 'Lot not found', 404);
+    }
+
+    const totalVotes = lot.verifications.length;
+    const completedVotes = lot.verifications.filter(v => v.vote !== null).length;
+    const approveVotes = lot.verifications.filter(v => v.vote === 'approve').length;
+    const rejectVotes = lot.verifications.filter(v => v.vote === 'reject').length;
+    const pendingVotes = lot.verifications.filter(v => v.vote === null).length;
+    const thresholdNeeded = Math.ceil(totalVotes * 0.51);
+
+    return successEnvelope({
+      lot: {
+        id: lot.id,
+        lotCode: lot.lotCode,
+        status: lot.status,
+        verificationStatus: lot.verificationStatus,
+        autoValidated: lot.autoValidated,
+        spotCheck: lot.spotCheck,
+        voteDeadline: lot.voteDeadline,
+        escalatedAt: lot.escalatedAt
+      },
+      verificationProgress: {
+        totalVotes,
+        completedVotes,
+        approveVotes,
+        rejectVotes,
+        pendingVotes,
+        thresholdNeeded,
+        approvalRatio: totalVotes > 0 ? Math.round((approveVotes / totalVotes) * 100) : 0,
+        approvalPercentage: totalVotes > 0 ? (approveVotes / totalVotes * 100).toFixed(1) + '%' : '0%',
+        status: completedVotes === totalVotes
+          ? (approveVotes >= thresholdNeeded ? 'approved' : 'rejected')
+          : 'pending'
+      }
+    });
   });
 };

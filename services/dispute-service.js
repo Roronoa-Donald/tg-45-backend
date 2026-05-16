@@ -247,33 +247,145 @@ async function getStatistics(prisma) {
 }
 
 /**
- * Add comment/note to dispute (optional enhancement)
+ * Add evidence to a dispute (photo, document URL, or text)
+ */
+async function addEvidence(prisma, disputeId, actorId, evidenceData) {
+  const { evidenceType, evidenceUrl, description, metadata } = evidenceData;
+
+  const dispute = await prisma.disputeCase.findUnique({
+    where: { id: disputeId }
+  });
+
+  if (!dispute) {
+    throw new AppError('not_found', 'Litige introuvable', 404);
+  }
+
+  if (dispute.status === DISPUTE_STATUS.RESOLVED || dispute.status === DISPUTE_STATUS.CLOSED) {
+    throw new AppError('invalid_operation', 'Impossible d\'ajouter des preuves à un litige clos', 400);
+  }
+
+  // Create dispute event for evidence
+  const event = await prisma.disputeEvent.create({
+    data: {
+      disputeId,
+      eventType: 'evidence_added',
+      actorId,
+      description: description || 'Preuve ajoutée',
+      metadata: {
+        evidenceType, // 'photo', 'document', 'text'
+        evidenceUrl: evidenceUrl || null,
+        ...metadata
+      }
+    },
+    include: {
+      actor: {
+        select: { id: true, name: true, role: true }
+      }
+    }
+  });
+
+  return event;
+}
+
+/**
+ * Assign investigator to dispute (Ministry role)
+ */
+async function assignInvestigator(prisma, disputeId, investigatorId) {
+  const dispute = await prisma.disputeCase.findUnique({
+    where: { id: disputeId }
+  });
+
+  if (!dispute) {
+    throw new AppError('not_found', 'Litige introuvable', 404);
+  }
+
+  // Verify investigator is Ministry role
+  const investigator = await prisma.user.findUnique({
+    where: { id: investigatorId }
+  });
+
+  if (!investigator || investigator.role !== 'ministry') {
+    throw new AppError('invalid_role', 'L\'investigateur doit avoir le rôle ministry', 400);
+  }
+
+  // Update dispute
+  const updated = await prisma.disputeCase.update({
+    where: { id: disputeId },
+    data: {
+      investigatorId,
+      status: DISPUTE_STATUS.INVESTIGATING
+    }
+  });
+
+  // Create event
+  await prisma.disputeEvent.create({
+    data: {
+      disputeId,
+      eventType: 'investigator_assigned',
+      actorId: investigatorId,
+      description: `Assigné à ${investigator.name || investigator.email}`
+    }
+  });
+
+  return updated;
+}
+
+/**
+ * Get dispute timeline (all events)
+ */
+async function getDisputeTimeline(prisma, disputeId) {
+  const events = await prisma.disputeEvent.findMany({
+    where: { disputeId },
+    include: {
+      actor: {
+        select: { id: true, name: true, role: true }
+      }
+    },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  return events;
+}
+
+/**
+ * Add comment/note to dispute
  */
 async function addNote(prisma, disputeId, userId, note) {
-  // This would require a DisputeNote table - implement if needed
-  // For now, we can add to resolution field or use a simple update
-  const dispute = await getDisputeById(prisma, disputeId);
-
-  const timestamp = new Date().toISOString();
-  const noteText = `[${timestamp}] Note de ${userId}: ${note}`;
-
-  const currentResolution = dispute.resolution || '';
-  const newResolution = currentResolution
-    ? `${currentResolution}\n\n${noteText}`
-    : noteText;
-
-  return prisma.disputeCase.update({
-    where: { id: disputeId },
-    data: { resolution: newResolution },
+  const dispute = await prisma.disputeCase.findUnique({
+    where: { id: disputeId }
   });
+
+  if (!dispute) {
+    throw new AppError('not_found', 'Litige introuvable', 404);
+  }
+
+  // Create event for note
+  const event = await prisma.disputeEvent.create({
+    data: {
+      disputeId,
+      eventType: 'note_added',
+      actorId: userId,
+      description: note
+    },
+    include: {
+      actor: {
+        select: { id: true, name: true, role: true }
+      }
+    }
+  });
+
+  return event;
 }
 
 module.exports = {
   DISPUTE_STATUS,
   createDispute,
+  addEvidence,
+  assignInvestigator,
   updateDisputeStatus,
   getDisputes,
   getDisputeById,
+  getDisputeTimeline,
   getStatistics,
   addNote,
 };

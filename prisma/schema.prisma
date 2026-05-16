@@ -37,7 +37,9 @@ model User {
   lotVerifications       LotVerification[]   @relation("lot_verifier")
   disputesReported       DisputeCase[]       @relation("dispute_reporter")
   disputesReceived       DisputeCase[]       @relation("dispute_accused")
+  disputesInvestigated   DisputeCase[]       @relation("dispute_investigator")
   disputesResolved       DisputeCase[]       @relation("dispute_resolver")
+  disputeEvents          DisputeEvent[]      @relation("dispute_event_actor")
   reputationScore        ReputationScore?
   reputationEvents       ReputationEvent[]
   cooperative            Cooperative?        @relation("CooperativeUsers", fields: [cooperativeId], references: [id])
@@ -113,6 +115,7 @@ model Lot {
   autoValidated       Boolean           @default(false) @map("auto_validated")
   spotCheck           Boolean           @default(false) @map("spot_check")
   voteDeadline        DateTime?         @map("vote_deadline")
+  escalatedAt         DateTime?         @map("escalated_at")
   eudrStatus          String            @default("not_started") @map("eudr_status") @db.VarChar(32)
   scaleImageUrl       String?           @map("scale_image_url")
   coopProofImageUrl   String?           @map("coop_proof_image_url")
@@ -278,12 +281,14 @@ model Parcel {
   locality         String?   @db.VarChar(120)
   geometryType     String    @map("geometry_type") @db.VarChar(16)
   geometry         Json
-  areaHa           Decimal?  @map("area_ha") @db.Decimal(10, 2)
-  validationStatus String    @default("pending") @map("validation_status") @db.VarChar(32) // pending, validated, rejected
-  validUntil       DateTime? @map("valid_until")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  lots             LotParcel[]
+  areaHa              Decimal?  @map("area_ha") @db.Decimal(10, 2)
+  validationStatus    String    @default("pending") @map("validation_status") @db.VarChar(32) // pending, validated, rejected
+  validUntil          DateTime? @map("valid_until")
+  blockchainTxHash    String?   @map("blockchain_tx_hash")
+  blockchainProofHash String?   @map("blockchain_proof_hash")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  lots                LotParcel[]
   validations      ParcelValidation[]
   deforestationChecks EudrDeforestationCheck[]
   owner            User      @relation(fields: [ownerId], references: [id])
@@ -466,14 +471,15 @@ model ParcelValidationPhoto {
 }
 
 model LotVerification {
-  id            String   @id @default(uuid()) @db.Uuid
-  lotId         String   @map("lot_id") @db.Uuid
-  verifierId    String   @map("verifier_id") @db.Uuid
-  vote          String?  @db.VarChar(16) // approve, reject, null means not voted yet
-  reason        String?
-  createdAt     DateTime @default(now()) @map("created_at")
-  lot           Lot      @relation(fields: [lotId], references: [id])
-  verifier      User     @relation("lot_verifier", fields: [verifierId], references: [id])
+  id             String    @id @default(uuid()) @db.Uuid
+  lotId          String    @map("lot_id") @db.Uuid
+  verifierId     String    @map("verifier_id") @db.Uuid
+  vote           String?   @db.VarChar(16) // approve, reject, null means not voted yet
+  reason         String?
+  reminderSentAt DateTime? @map("reminder_sent_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  lot            Lot       @relation(fields: [lotId], references: [id])
+  verifier       User      @relation("lot_verifier", fields: [verifierId], references: [id])
 
   @@unique([lotId, verifierId])
   @@map("lot_verifications")
@@ -555,25 +561,44 @@ model ReputationEvent {
 // ==========================================
 
 model DisputeCase {
-  id                String   @id @default(uuid()) @db.Uuid
-  lotId             String   @map("lot_id") @db.Uuid
-  reportedBy        String   @map("reported_by") @db.Uuid
-  reportedAgainst   String   @map("reported_against") @db.Uuid
-  reason            String   @db.Text
-  evidence          Json?    // URLs de photos/documents
-  status            String   @default("ouvert") @db.VarChar(30) // ouvert, en_investigation, resolu, clos
-  resolution        String?  @db.Text
-  resolvedBy        String?  @map("resolved_by") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at")
-  resolvedAt        DateTime? @map("resolved_at")
-  lot               Lot      @relation(fields: [lotId], references: [id])
-  reporter          User     @relation("dispute_reporter", fields: [reportedBy], references: [id])
-  accused           User     @relation("dispute_accused", fields: [reportedAgainst], references: [id])
-  resolver          User?    @relation("dispute_resolver", fields: [resolvedBy], references: [id])
+  id                String          @id @default(uuid()) @db.Uuid
+  lotId             String          @map("lot_id") @db.Uuid
+  reportedBy        String          @map("reported_by") @db.Uuid
+  reportedAgainst   String          @map("reported_against") @db.Uuid
+  reason            String          @db.Text
+  evidence          Json?           // URLs de photos/documents
+  status            String          @default("ouvert") @db.VarChar(30) // ouvert, en_investigation, resolu, clos
+  resolution        String?         @db.Text
+  investigatorId    String?         @map("investigator_id") @db.Uuid
+  resolvedBy        String?         @map("resolved_by") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at")
+  resolvedAt        DateTime?       @map("resolved_at")
+  lot               Lot             @relation(fields: [lotId], references: [id])
+  reporter          User            @relation("dispute_reporter", fields: [reportedBy], references: [id])
+  accused           User            @relation("dispute_accused", fields: [reportedAgainst], references: [id])
+  investigator      User?           @relation("dispute_investigator", fields: [investigatorId], references: [id])
+  resolver          User?           @relation("dispute_resolver", fields: [resolvedBy], references: [id])
+  events            DisputeEvent[]
 
   @@map("dispute_cases")
   @@index([lotId])
   @@index([reportedBy])
   @@index([reportedAgainst])
   @@index([status])
+}
+
+model DisputeEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  disputeId   String       @map("dispute_id") @db.Uuid
+  eventType   String       @map("event_type") @db.VarChar(50) // opened, evidence_added, investigator_assigned, status_changed, resolved
+  actorId     String?      @map("actor_id") @db.Uuid
+  description String?      @db.Text
+  metadata    Json?        // Additional data (evidence URLs, old/new status, etc.)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  dispute     DisputeCase  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  actor       User?        @relation("dispute_event_actor", fields: [actorId], references: [id])
+
+  @@map("dispute_events")
+  @@index([disputeId])
+  @@index([actorId])
 }
