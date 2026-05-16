@@ -6,7 +6,7 @@ const lotRegisterSchema = z.object({
   hsCode: z.string().min(2).optional(),
   originCountry: z.string().min(2).max(3).optional(),
   originRegion: z.string().min(2).optional(),
-  weightKg: z.number().nonnegative().default(0),
+  weightKg: z.number().nonnegative().max(99999999, 'Le poids ne peut pas depasser 99 999 999 kg').default(0),
   harvestDate: z.string().datetime().optional(),
   productionStartDate: z.string().datetime().optional(),
   productionEndDate: z.string().datetime().optional(),
@@ -34,7 +34,7 @@ const lotTransferSchema = z.object({
 });
 
 const lotDetailsSchema = z.object({
-  weightKg: z.number().positive(),
+  weightKg: z.number().positive().max(99999999, 'Le poids ne peut pas depasser 99 999 999 kg'),
   coopProofImageUrl: z.string().url().optional()
 });
 

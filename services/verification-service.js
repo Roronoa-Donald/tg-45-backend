@@ -76,7 +76,7 @@ async function assignStatus(prisma, lotId, status, actorId, reason, gps, userCoo
     await lotRepository.updateLotStatus(prisma, lotId, LOT_STATUS.CERTIFIED);
     await lotRepository.addLotEvent(prisma, {
       lotId,
-      actorId: 'system',
+      actorId: actorId,
       eventType: LOT_EVENT_TYPES.CERTIFY,
       metadata: { status: LOT_STATUS.CERTIFIED, reason: 'Auto-validation pre-approuvee' }
     });
